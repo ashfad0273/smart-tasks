@@ -30,7 +30,7 @@
   "vars": {
     // Optional: Google OAuth "Web application" client ID. Leave empty to hide
     // the Google button. The extension reads it from GET /v1/config.
-    "GOOGLE_CLIENT_ID": "",
+    "GOOGLE_CLIENT_ID": "398680487131-fhd2tm0c7ps42ma8124qr0aeeuunhlqh.apps.googleusercontent.com",
     // Optional: sender for password-reset codes. Needs Cloudflare Email
     // Sending enabled on the domain AND the send_email binding below.
     "EMAIL_FROM": ""

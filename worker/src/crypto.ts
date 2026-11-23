@@ -84,7 +84,7 @@ export interface GoogleClaims {
   nonce?: string;
 }
 
-export async function verifyGoogleIdToken(idToken: string, clientId: string): Promise<GoogleClaims> {
+export async function verifyGoogleIdToken(idToken: string, clientId: string, nonce: string): Promise<GoogleClaims> {
   const [h, p, s] = idToken.split('.');
   if (!h || !p || !s) throw new Error('Malformed token');
   const header = JSON.parse(new TextDecoder().decode(fromB64url(h))) as { kid: string; alg: string };
@@ -108,6 +108,7 @@ export async function verifyGoogleIdToken(idToken: string, clientId: string): Pr
   if (c.iss !== 'https://accounts.google.com' && c.iss !== 'accounts.google.com') throw new Error('Bad issuer');
   if (c.aud !== clientId) throw new Error('Bad audience');
   if (c.exp * 1000 < Date.now()) throw new Error('Token expired');
+  if (!nonce || c.nonce !== nonce) throw new Error('Nonce mismatch');
   if (!c.email || !c.email_verified) throw new Error('Google email not verified');
   return c;
 }

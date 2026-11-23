@@ -1,6 +1,7 @@
 # dependencies & build output
 node_modules/
 .output/
+dist/
 .wxt/
 build/
 build.zip

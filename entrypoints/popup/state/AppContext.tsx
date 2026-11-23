@@ -122,7 +122,7 @@ export function useApp(): AppCtx {
 const isPending = (t: Task) => !t.completedAt;
 const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Date(b).toDateString();
 
-async function googleIdToken(clientId: string): Promise<string> {
+async function googleIdToken(clientId: string): Promise<{ idToken: string; nonce: string }> {
   if (!isExtension() || !chrome.identity?.launchWebAuthFlow) {
     throw new Error('Google sign-in works inside the Chrome extension only.');
   }
@@ -146,7 +146,7 @@ async function googleIdToken(clientId: string): Promise<string> {
   const params = new URLSearchParams(new URL(responseUrl ?? 'x:').hash.replace(/^#/, ''));
   const idToken = params.get('id_token');
   if (!idToken) throw new Error(params.get('error') === 'access_denied' ? 'Sign-in was cancelled.' : 'Google sign-in failed.');
-  return idToken;
+  return { idToken, nonce };
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -393,7 +393,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = useCallback(async () => {
     const clientId = config?.googleClientId;
     if (!clientId) return;
-    await runAuth(async () => api.google(await googleIdToken(clientId)));
+    await runAuth(async () => {
+      const { idToken, nonce } = await googleIdToken(clientId);
+      return api.google(idToken, nonce);
+    });
   }, [config, runAuth]);
 
   const startLocal = useCallback(async () => {

@@ -9,6 +9,8 @@ const DEV_KEY =
   'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvTUtNogs/adg3k678c3hG3mXGq6ZIBVt9QNgzDBmccyBwESD6uj2PmP3g80ZEkQhXZofwDjR+4bVcCgyG87zsphLT6PETYZDyfkHQGZ+PWCc8k94NEIKm+cfNb6Bc0Wrubr//8ewAP1HXxD46j/ia4+peCYr6s/w7RgXfhHNFzimfHDLKpxdmXCqbz1SVb829KpIUzRObg6tdBSAN/ze5Cf39xVmgZgcs7vpQB6cbqbPy3zSjO5My0Wf0umsXZ2hs/9/nHP4Tzuv1cl+mkseXryEUjV7ZaempRiFymYXvfrvBC9ls7wDb0/FppjCL4/PiS0VVQ8UI+vIdWcpxEV6gQIDAQAB';
 
 export default defineConfig({
+  // Visible output folder (not .output) so it's easy to pick in Chrome's "Load unpacked" dialog.
+  outDir: 'dist',
   modules: ['@wxt-dev/module-react'],
   vite: () => ({
     plugins: [tailwindcss()],

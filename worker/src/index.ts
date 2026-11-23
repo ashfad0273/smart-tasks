@@ -155,10 +155,10 @@ async function login(req: Request, env: Env): Promise<Response> {
 async function google(req: Request, env: Env): Promise<Response> {
   await rateLimit(env, req, 'google');
   if (!env.GOOGLE_CLIENT_ID) throw new HttpError(501, 'google-disabled', 'Google sign-in is not enabled.');
-  const b = await readJson<{ idToken?: string }>(req);
+  const b = await readJson<{ idToken?: string; nonce?: string }>(req);
   let claims;
   try {
-    claims = await verifyGoogleIdToken(String(b.idToken ?? ''), env.GOOGLE_CLIENT_ID);
+    claims = await verifyGoogleIdToken(String(b.idToken ?? ''), env.GOOGLE_CLIENT_ID, String(b.nonce ?? ''));
   } catch (e) {
     throw new HttpError(401, 'google-failed', `Google sign-in failed: ${(e as Error).message}`);
   }

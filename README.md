@@ -63,7 +63,7 @@ npm run worker:dev
 npm run dev                       # opens Chrome with the extension loaded
 ```
 
-To load it manually, run `npm run build`, then open `chrome://extensions`, turn on Developer mode, choose **Load unpacked** and select `.output/chrome-mv3`.
+To load it manually, run `npm run build`, then open `chrome://extensions`, turn on Developer mode, choose **Load unpacked** and select `dist/chrome-mv3`.
 
 Checks:
 

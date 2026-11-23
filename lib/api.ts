@@ -58,7 +58,7 @@ export const api = {
   config: () => call<ServerConfig>('/v1/config', { timeoutMs: 5000 }),
   signup: (name: string, email: string, password: string) => call<AuthResult>('/v1/auth/signup', post({ name, email, password })),
   login: (email: string, password: string) => call<AuthResult>('/v1/auth/login', post({ email, password })),
-  google: (idToken: string) => call<AuthResult>('/v1/auth/google', post({ idToken })),
+  google: (idToken: string, nonce: string) => call<AuthResult>('/v1/auth/google', post({ idToken, nonce })),
   resetRequest: (email: string) => call<{ ok: true }>('/v1/auth/reset/request', post({ email })),
   resetConfirm: (email: string, code: string, password: string) =>
     call<AuthResult>('/v1/auth/reset/confirm', post({ email, code, password })),

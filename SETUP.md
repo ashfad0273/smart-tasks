@@ -62,7 +62,7 @@ Then run `npm run deploy`. `/v1/config` will report `passwordReset: true`.
 1. Register a developer account at <https://chrome.google.com/webstore/devconsole> (one-time US$5 fee).
 2. Build the store package. This leaves out the dev-only manifest `key`, which the store rejects:
    ```bash
-   npm run zip        # → .output/smart-tasks-1.0.0-chrome.zip
+   npm run zip        # → dist/smart-tasks-1.0.0-chrome.zip
    ```
 3. Upload the zip and fill in the listing:
    - **Category:** Productivity.
