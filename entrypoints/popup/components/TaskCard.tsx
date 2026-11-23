@@ -7,7 +7,8 @@ import Burst from './Burst';
 
 export default function TaskCard({ task, index }: { task: Task; index: number }) {
   const app = useApp();
-  const cat = app.categoryById(task.categoryId);
+  // Inside a category's own filter the chip says nothing new, so hide it there.
+  const cat = app.filter === task.categoryId ? null : app.categoryById(task.categoryId);
   const due = task.dueAt ? formatDue(task.dueAt) : null;
   const done = !!task.completedAt;
   const doneSubs = task.subtasks.filter(s => s.done).length;
@@ -106,11 +107,23 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
               )}
             >
               {task.title}
+              {task.subtasks.length > 0 && (
+                <span
+                  className={cx(
+                    'ml-1.5 inline-flex translate-y-[-1px] items-center gap-0.5 whitespace-nowrap align-middle text-[11px] font-semibold tabular-nums no-underline',
+                    doneSubs === task.subtasks.length ? 'text-acc' : 'text-mut',
+                  )}
+                  title={`${doneSubs} of ${task.subtasks.length} subtasks done`}
+                >
+                  <ListChecks size={11} />
+                  {doneSubs}/{task.subtasks.length}
+                </span>
+              )}
             </span>
           </button>
         )}
 
-        {(cat || due || task.subtasks.length > 0 || task.url) && (
+        {(cat || due || task.url) && (
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
             {cat && (
               <button
@@ -127,18 +140,6 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
               <span className={cx('inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5', dueTone || 'bg-surface2 text-mut')}>
                 <Clock size={10} />
                 {due.overdue && !done ? `Overdue · ${due.label}` : due.label}
-              </span>
-            )}
-            {task.subtasks.length > 0 && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface2 px-2 py-0.5 text-mut">
-                <ListChecks size={10} />
-                {doneSubs}/{task.subtasks.length}
-                <span className="ml-0.5 h-1 w-8 overflow-hidden rounded-full bg-line">
-                  <span
-                    className="grad-acc block h-full rounded-full transition-[width] duration-500"
-                    style={{ width: `${(doneSubs / task.subtasks.length) * 100}%` }}
-                  />
-                </span>
               </span>
             )}
             {task.url && (
