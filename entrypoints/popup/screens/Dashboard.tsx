@@ -230,7 +230,7 @@ export default function Dashboard() {
                 </span>
               )}
               {!parsed.dueAt && !parsed.priority && !parsed.categoryName && (
-                <span className="text-mut/70">Enter ↵ to add · use “tomorrow 5pm”, “!high”, “#work”</span>
+                <span className="text-mut/70">Enter to add · try tomorrow 5pm, !high, #work</span>
               )}
             </>
           )}

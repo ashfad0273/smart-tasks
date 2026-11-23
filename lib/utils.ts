@@ -178,7 +178,9 @@ export function parseQuickAdd(input: string): {
   priority: Priority | null;
   categoryName: string | null;
 } {
-  let s = ' ' + input.trim() + ' ';
+  // Quotes, brackets and trailing punctuation shouldn't hide a keyword:
+  // `Call mom "tomorrow 6pm".` parses the same as `Call mom tomorrow 6pm`.
+  let s = ' ' + input.trim().replace(/["“”«»()[\],;]/g, ' ').replace(/[.!?](?=\s|$)/g, m => (m === '!' ? m : ' ')) + ' ';
   let priority: Priority | null = null;
   let categoryName: string | null = null;
   let day: number | null = null;
@@ -200,13 +202,38 @@ export function parseQuickAdd(input: string): {
     if (k === 'tonight' && hour === null) hour = 20;
     return ' ';
   });
-  s = s.replace(/\s(?:at\s)?(\d{1,2})(?::(\d{2}))?\s?(am|pm)(?=\s)/i, (_, h: string, m: string | undefined, ap: string) => {
+  const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  if (day === null) {
+    s = s.replace(/\s(?:on\s)?(sun|mon|tues?|wed|thu(?:rs)?|fri|sat)(?:day|nesday|urday)?(?=\s)/i, (_, w: string) => {
+      const target = WEEKDAYS.indexOf(w.slice(0, 3).toLowerCase());
+      const diff = (target - new Date().getDay() + 7) % 7;
+      day = diff === 0 ? 7 : diff; // "monday" on a Monday means next week
+      return ' ';
+    });
+  }
+  // 12-hour: 1pm, 1:20pm, 1 pm, at 9am, noon, midnight
+  s = s.replace(/\s(?:at\s)?(\d{1,2})(?:[:.](\d{2}))?\s?([ap])\.?m\.?(?=\s)/i, (_, h: string, m: string | undefined, ap: string) => {
     let hh = Number(h) % 12;
-    if (ap.toLowerCase() === 'pm') hh += 12;
+    if (ap.toLowerCase() === 'p') hh += 12;
     hour = hh;
-    minute = m ? Number(m) : 0;
+    minute = m ? Math.min(59, Number(m)) : 0;
     return ' ';
   });
+  if (hour === null) {
+    s = s.replace(/\s(?:at\s)?(noon|midnight)(?=\s)/i, (_, w: string) => {
+      hour = w.toLowerCase() === 'noon' ? 12 : 0;
+      minute = 0;
+      return ' ';
+    });
+  }
+  // 24-hour: 13:30, at 9:05
+  if (hour === null) {
+    s = s.replace(/\s(?:at\s)?([01]?\d|2[0-3]):([0-5]\d)(?=\s)/, (_, h: string, m: string) => {
+      hour = Number(h);
+      minute = Number(m);
+      return ' ';
+    });
+  }
 
   const title = s.replace(/\s+/g, ' ').trim();
   let dueAt: number | null = null;
