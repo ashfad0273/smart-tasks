@@ -2,6 +2,13 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## 1.4.0 - 2026-11-23
+
+### Added
+- **Automatic updates.** Smart Tasks checks for new versions when your browser starts, every 30 minutes and whenever you open it. Click Update once and pick your Smart Tasks folder; choose Allow on every visit and later updates install on their own, with a notification when they do.
+- **Update banner.** The popup shows when a new version is ready, with what changed.
+- **Check for updates** at the bottom of Settings.
+
 ## 1.3.0 - 2026-11-23
 
 ### Added

@@ -2,6 +2,7 @@
 //   1. zips dist/chrome-mv3 as smart-tasks-<version>.zip (and smart-tasks-latest.zip)
 //   2. renders CHANGELOG.md into site/template.html
 // Run `npm run site` (builds the extension first) and `npm run site:deploy` to publish.
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -91,10 +92,42 @@ const html = readFileSync(join(root, 'site/template.html'), 'utf8')
 writeFileSync(join(out, 'index.html'), html);
 copyFileSync(join(root, 'CHANGELOG.md'), join(out, 'CHANGELOG.md'));
 
-// Zips should download, and the page should always be fresh.
+// What the extension's updater reads to find and verify a new version.
+const plain = s => s.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`(.+?)`/g, '$1');
+writeFileSync(
+  join(out, 'version.json'),
+  JSON.stringify(
+    {
+      version,
+      date: releases[0].date,
+      zip: `/${zip}`,
+      size: statSync(join(out, zip)).size,
+      sha256: createHash('sha256').update(readFileSync(join(out, zip))).digest('hex'),
+      notes: releases[0].groups.flatMap(g => g.items.map(plain)),
+    },
+    null,
+    2,
+  ),
+);
+
+// Zips should download, the page and version info should always be fresh, and
+// the extension (a chrome-extension:// origin) may fetch the update files.
 writeFileSync(
   join(out, '_headers'),
-  `/*.zip\n  Content-Type: application/zip\n  Cache-Control: public, max-age=300\n/\n  Cache-Control: no-cache\n/index.html\n  Cache-Control: no-cache\n`,
+  [
+    '/*.zip',
+    '  Content-Type: application/zip',
+    '  Cache-Control: public, max-age=300',
+    '  Access-Control-Allow-Origin: *',
+    '/version.json',
+    '  Cache-Control: no-cache',
+    '  Access-Control-Allow-Origin: *',
+    '/',
+    '  Cache-Control: no-cache',
+    '/index.html',
+    '  Cache-Control: no-cache',
+    '',
+  ].join('\n'),
 );
 
 console.log(`site/public ready: ${zip} (${size}), ${releases.length} releases in the changelog`);

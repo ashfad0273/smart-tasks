@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Update Smart Tasks</title>
+    <link rel="icon" href="/icon/32.png" />
+    <style>
+      :root { --bg: #10191c; --surface: #151f22; --line: #24343a; --mut: #8a9b9f; --acc: #3fd1c5; --pop: #9d7bfa; --danger: #f43f5e; --ease: cubic-bezier(0.22, 1, 0.36, 1); }
+      * { box-sizing: border-box; }
+      html { color-scheme: dark; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+        background: radial-gradient(900px 500px at 10% -10%, #15343a 0%, transparent 60%), radial-gradient(700px 400px at 100% 0%, #1d1838 0%, transparent 55%), var(--bg); }
+      .card { width: min(460px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 28px; box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.7); animation: in 0.5s var(--ease) both; }
+      @keyframes in { from { opacity: 0; transform: translateY(10px); } }
+      .top { display: flex; align-items: center; gap: 14px; }
+      .top img { width: 48px; height: 48px; filter: drop-shadow(0 10px 20px rgba(63, 209, 197, 0.3)); }
+      h1 { font-size: 19px; margin: 0; letter-spacing: -0.01em; }
+      .sub { margin: 2px 0 0; color: var(--mut); font-size: 13.5px; }
+      .pill { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--acc); border: 1px solid rgba(63, 209, 197, 0.3); padding: 2px 8px; border-radius: 999px; margin-left: 6px; vertical-align: 2px; }
+      ul { margin: 18px 0 0; padding: 14px 16px 14px 32px; background: rgba(255, 255, 255, 0.025); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; color: #c9d4d6; font-size: 13.5px; line-height: 1.5; max-height: 220px; overflow: auto; }
+      li { margin: 4px 0; } li::marker { color: #45606a; }
+      .btn { margin-top: 20px; width: 100%; border: 0; cursor: pointer; padding: 13px 18px; border-radius: 999px; font: inherit; font-weight: 650; font-size: 14.5px; color: #062022;
+        background: linear-gradient(135deg, #6ff0dc 0%, #3fd1c5 50%, #2794bd 100%); box-shadow: 0 10px 30px -10px rgba(63, 209, 197, 0.6); transition: transform 0.2s var(--ease), opacity 0.2s; }
+      .btn:hover { transform: translateY(-1px); } .btn:active { transform: scale(0.98); } .btn:disabled { opacity: 0.6; cursor: default; transform: none; }
+      .note { margin: 14px 0 0; font-size: 12.5px; color: var(--mut); line-height: 1.5; }
+      .note b { color: #fff; font-weight: 600; }
+      .err { margin: 14px 0 0; font-size: 13px; color: #fda4af; background: rgba(244, 63, 94, 0.08); border: 1px solid rgba(244, 63, 94, 0.25); padding: 10px 12px; border-radius: 12px; }
+      .bar { margin-top: 18px; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+      .bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, #2794bd, #3fd1c5, #6ff0dc); box-shadow: 0 0 10px rgba(63, 209, 197, 0.6); transition: width 0.4s var(--ease); }
+      .hide { display: none !important; }
+      a { color: var(--acc); }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="top">
+        <img src="/icon/128.png" alt="" />
+        <div>
+          <h1 id="title">Checking for updates</h1>
+          <p class="sub" id="sub">One moment.</p>
+        </div>
+      </div>
+      <ul id="notes" class="hide"></ul>
+      <div class="bar hide" id="bar"><i id="fill"></i></div>
+      <p class="err hide" id="err"></p>
+      <button class="btn hide" id="go">Update now</button>
+      <p class="note hide" id="help"></p>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

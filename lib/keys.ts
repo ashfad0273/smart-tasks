@@ -10,6 +10,12 @@ export const NOTICE_LINKS_KEY = 'st-notice-links';
 export const AGENT_SOUND_KEY = 'st-agent-sound';
 /** Set by the service worker when a notification click should land on a screen. */
 export const OPEN_SCREEN_KEY = 'st-open-screen';
+/** Newer release found by the updater: UpdateInfo or null. */
+export const UPDATE_KEY = 'st-update';
+/** Set just before the updater reloads the extension: {from, to}. */
+export const UPDATED_KEY = 'st-updated';
+/** Version we last sent an "update ready" notification for. */
+export const UPDATE_NOTIFIED_KEY = 'st-update-notified';
 
 export const baseKey = (uid: string) => `st-base:${uid}`;
 export const outboxKey = (uid: string) => `st-outbox:${uid}`;

@@ -3,7 +3,7 @@
 A Chrome extension to-do list that syncs across devices in real time. Its backend is a Cloudflare Worker.
 
 **Download:** https://smart-tasks.ashfadhossain0.workers.dev (install steps and the changelog are there too; see [CHANGELOG.md](CHANGELOG.md)).
-To publish a new version: bump `version` in `wxt.config.ts`, add a section at the top of `CHANGELOG.md`, then run `npm run site:deploy`.
+To publish a new version: bump `version` in `wxt.config.ts`, add a section at the top of `CHANGELOG.md`, then run `npm run site:deploy`. Installed copies (1.4.0 and later) pick it up through `version.json` and update themselves (see `lib/updater.ts`).
 
 - **Quick add with natural language:** `Pay rent next week 9am !high #personal`.
 - **Tasks:** categories, subtasks, notes, links, priorities, and due dates with desktop reminders that you can mark done or snooze from the notification.

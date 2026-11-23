@@ -12,11 +12,13 @@ import {
   SearchX,
   Settings as SettingsIcon,
   Sparkles,
+  ArrowUpCircle,
   X,
 } from 'lucide-react';
 import { cx, startOfDay } from '../../../lib/utils';
 import { onStorageChange, storageGet, storageSet } from '../../../lib/ext';
-import { inboxKey, OPEN_SCREEN_KEY } from '../../../lib/keys';
+import { inboxKey, OPEN_SCREEN_KEY, UPDATE_KEY } from '../../../lib/keys';
+import { newer, type UpdateInfo } from '../../../lib/updater';
 import type { InboxItem } from '../../../lib/api';
 import { useApp, type Tab } from '../state/AppContext';
 import Confetti from '../components/Confetti';
@@ -147,6 +149,20 @@ export default function Dashboard() {
     return onStorageChange(keys => keys.includes(inboxKey(uid)) && void read());
   }, [uid, app]);
 
+  // A newer downloaded build is available (unpacked installs update themselves).
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  useEffect(() => {
+    const ext = globalThis.chrome?.runtime;
+    if (!ext?.getManifest) return;
+    const read = async () => {
+      const info = await storageGet<UpdateInfo | null>(UPDATE_KEY, null);
+      setUpdate(info && newer(info.version, ext.getManifest().version) ? info : null);
+    };
+    void read();
+    ext.sendMessage?.({ type: 'st-check-update' })?.catch(() => {});
+    return onStorageChange(keys => keys.includes(UPDATE_KEY) && void read());
+  }, []);
+
   const sections = useMemo(() => sectionize(app.visibleTasks), [app.visibleTasks]);
   const streak = useMemo(() => streakOf(app.tasks), [app.tasks]);
   const doneToday = useMemo(() => {
@@ -239,6 +255,19 @@ export default function Dashboard() {
         </div>
       </header>
 
+      {update && (
+        <button
+          onClick={() => void chrome.tabs.create({ url: chrome.runtime.getURL('update.html?go=1') })}
+          className="press anim-pop mx-6 mt-4 flex items-center gap-2.5 rounded-xl border border-acc/25 bg-acc/[.08] px-3.5 py-2.5 text-left hover:bg-acc/[.12]"
+        >
+          <ArrowUpCircle size={15} className="shrink-0 text-acc" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[12px] font-semibold text-txt">Version {update.version} is ready</span>
+            {update.notes[0] && <span className="block truncate text-[11px] text-mut">{update.notes[0]}</span>}
+          </span>
+          <span className="shrink-0 rounded-full bg-acc/15 px-2.5 py-1 text-[11px] font-semibold text-acc">Update</span>
+        </button>
+      )}
       {app.sessionExpired && acc && (
         <button
           onClick={app.startAddAccount}

@@ -1,11 +1,12 @@
 import { defineBackground } from 'wxt/utils/define-background';
 import { signInWithGoogle } from '../lib/auth';
 import { storageGet, storageSet } from '../lib/ext';
-import { api, type InboxItem } from '../lib/api';
-import { AGENT_NOTIFY_KEY, AGENT_SOUND_KEY, inboxKey, NOTICE_LINKS_KEY, OPEN_SCREEN_KEY, noticesSeenKey, REGISTRY_KEY, REMINDERS_ENABLED_KEY, REMINDERS_KEY, REMINDERS_SENT_KEY, baseKey, outboxKey } from '../lib/keys';
+import { api, SITE_URL, type InboxItem } from '../lib/api';
+import { AGENT_NOTIFY_KEY, AGENT_SOUND_KEY, inboxKey, NOTICE_LINKS_KEY, OPEN_SCREEN_KEY, UPDATE_KEY, UPDATE_NOTIFIED_KEY, UPDATED_KEY, noticesSeenKey, REGISTRY_KEY, REMINDERS_ENABLED_KEY, REMINDERS_KEY, REMINDERS_SENT_KEY, baseKey, outboxKey } from '../lib/keys';
 import { GRACE_MS, writeReminders, type Reminder } from '../lib/reminders';
 import { activeAccount, loadRegistry, mutate, newId, readView, sync } from '../lib/store';
 import { isSameDay } from '../lib/utils';
+import { currentVersion, download, fetchLatest, hasAccess, install, isOurFolder, isUnpacked, loadFolder, newer, type UpdateInfo } from '../lib/updater';
 
 /**
  * Service worker:
@@ -15,11 +16,14 @@ import { isSameDay } from '../lib/utils';
  *  - toolbar badge with today's open + overdue count
  *  - right-click capture of selections / pages
  *  - notifications sent by the user's AI agent (MCP "notify" tool)
+ *  - self-update for downloaded (unpacked) installs, see lib/updater.ts
  */
 
 const SYNC_ALARM = 'st-sync';
 const REMINDER_ALARM = 'st-reminder-due';
 const SNOOZE_MS = 10 * 60_000;
+const UPDATE_ALARM = 'st-update-check';
+const UPDATE_PAGE = () => chrome.runtime.getURL('update.html');
 
 export default defineBackground(() => {
   /* ── context menus ────────────────────────────────────────────────── */
@@ -173,6 +177,74 @@ export default defineBackground(() => {
     return noticeCheck;
   }
 
+  /* ── self-update ──────────────────────────────────────────────────── */
+
+  let updateCheck: Promise<void> | null = null;
+  function checkUpdate(): Promise<void> {
+    updateCheck ??= (async () => {
+      try {
+        if (!(await isUnpacked())) return;
+        const info = await fetchLatest();
+        if (!newer(info.version, currentVersion())) {
+          await storageSet(UPDATE_KEY, null);
+          return;
+        }
+        await storageSet(UPDATE_KEY, info);
+        if (await installQuietly(info)) return;
+        // Can't install on our own: tell the user once per version.
+        if ((await storageGet<string | null>(UPDATE_NOTIFIED_KEY, null)) !== info.version) {
+          await storageSet(UPDATE_NOTIFIED_KEY, info.version);
+          chrome.notifications.create('st-update', {
+            type: 'basic',
+            iconUrl: chrome.runtime.getURL('icon/128.png'),
+            title: `Smart Tasks ${info.version} is ready`,
+            message: info.notes[0] ?? 'A new version is available.',
+            buttons: [{ title: 'Update now' }],
+            priority: 1,
+          });
+        }
+      } catch {
+        /* offline or the site is down: try again next time */
+      } finally {
+        updateCheck = null;
+      }
+    })();
+    return updateCheck;
+  }
+
+  /** Install without asking when the user already allowed folder access for good. */
+  async function installQuietly(info: UpdateInfo): Promise<boolean> {
+    try {
+      const dir = await loadFolder();
+      if (!dir || !(await hasAccess(dir)) || !(await isOurFolder(dir))) return false;
+      // Don't yank the popup out from under someone; the popup offers the update instead.
+      const popups = await chrome.runtime.getContexts({ contextTypes: [chrome.runtime.ContextType.POPUP] });
+      if (popups.length) return true;
+      const files = await download(info);
+      await install(dir, files);
+      await storageSet(UPDATED_KEY, { from: currentVersion(), to: info.version });
+      chrome.runtime.reload();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function announceUpdate(): Promise<void> {
+    const done = await storageGet<{ from: string; to: string } | null>(UPDATED_KEY, null);
+    if (!done) return;
+    await storageSet(UPDATED_KEY, null);
+    await storageSet(UPDATE_KEY, null);
+    if (done.to !== currentVersion()) return;
+    chrome.notifications.create('st-updated', {
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('icon/128.png'),
+      title: `Smart Tasks updated to ${done.to}`,
+      message: 'Click to see what changed.',
+      priority: 0,
+    });
+  }
+
   /* ── background sync ──────────────────────────────────────────────── */
 
   async function syncAll(): Promise<void> {
@@ -229,6 +301,8 @@ export default defineBackground(() => {
   const boot = () => {
     setupMenus();
     void chrome.alarms.create(SYNC_ALARM, { periodInMinutes: 1 });
+    void chrome.alarms.create(UPDATE_ALARM, { delayInMinutes: 1, periodInMinutes: 30 });
+    void announceUpdate().then(checkUpdate);
     void syncAll();
     void refreshDerived().then(checkReminders);
   };
@@ -238,6 +312,7 @@ export default defineBackground(() => {
   chrome.alarms.onAlarm.addListener(alarm => {
     if (alarm.name === SYNC_ALARM) void syncAll().then(refreshDerived);
     else if (alarm.name === REMINDER_ALARM) void checkReminders();
+    else if (alarm.name === UPDATE_ALARM) void checkUpdate();
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -283,6 +358,10 @@ export default defineBackground(() => {
         });
       return true;
     }
+    if (msg?.type === 'st-check-update') {
+      void checkUpdate();
+      return false;
+    }
     if (msg?.type === 'st-check-notices') {
       void checkNotices();
       return false;
@@ -295,6 +374,11 @@ export default defineBackground(() => {
   });
 
   chrome.notifications.onButtonClicked.addListener((id, button) => {
+    if (id === 'st-update') {
+      void chrome.notifications.clear(id);
+      void chrome.tabs.create({ url: `${UPDATE_PAGE()}?go=1` });
+      return;
+    }
     if (!id.startsWith('st-reminder:')) return;
     const taskId = id.slice('st-reminder:'.length);
     void chrome.notifications.clear(id);
@@ -304,6 +388,14 @@ export default defineBackground(() => {
 
   chrome.notifications.onClicked.addListener(id => {
     void chrome.notifications.clear(id);
+    if (id === 'st-update') {
+      void chrome.tabs.create({ url: UPDATE_PAGE() });
+      return;
+    }
+    if (id === 'st-updated') {
+      void chrome.tabs.create({ url: `${SITE_URL}/#changelog` });
+      return;
+    }
     void (async () => {
       if (id.startsWith('st-agent:')) {
         const [, uid, nid] = id.split(':');

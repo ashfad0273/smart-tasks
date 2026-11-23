@@ -244,6 +244,13 @@ export default function SettingsScreen() {
             v{manifestVersion()}
           </a>
           <span aria-hidden="true">·</span>
+          <button
+            onClick={() => void chrome.tabs.create({ url: chrome.runtime.getURL('update.html') })}
+            className="hover:text-txt hover:underline"
+          >
+            Check for updates
+          </button>
+          <span aria-hidden="true">·</span>
           <a href={`${API_URL}/privacy`} target="_blank" rel="noreferrer" className="hover:text-txt hover:underline">
             Privacy
           </a>
