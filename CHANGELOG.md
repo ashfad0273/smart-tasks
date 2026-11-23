@@ -2,6 +2,11 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## 1.4.1 - 2026-11-23
+
+### Changed
+- When a new version is ready, the link at the bottom of Settings says Update to that version and starts the update in one click.
+
 ## 1.4.0 - 2026-11-23
 
 ### Added

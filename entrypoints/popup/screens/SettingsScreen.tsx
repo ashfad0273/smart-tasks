@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Bell, Bot, ChevronLeft, MonitorSmartphone, Download, Keyboard, LogOut, Pencil, RefreshCw, Tags, Trash2, Users } from 'lucide-react';
 import { API_URL, SITE_URL } from '../../../lib/api';
 import { manifestVersion, onStorageChange, storageGet, storageSet } from '../../../lib/ext';
-import { REMINDERS_ENABLED_KEY, REMINDERS_KEY } from '../../../lib/keys';
+import { REMINDERS_ENABLED_KEY, REMINDERS_KEY, UPDATE_KEY } from '../../../lib/keys';
+import { newer, type UpdateInfo } from '../../../lib/updater';
 import { formatDue } from '../../../lib/utils';
 import type { Reminder } from '../../../lib/reminders';
 import { useApp } from '../state/AppContext';
@@ -65,6 +66,15 @@ export default function SettingsScreen() {
   const app = useApp();
   const acc = app.account;
   const [remindersOn, setRemindersOn] = useState<boolean | null>(null);
+  const [updateTo, setUpdateTo] = useState<string | null>(null);
+  useEffect(() => {
+    const read = async () => {
+      const info = await storageGet<UpdateInfo | null>(UPDATE_KEY, null);
+      setUpdateTo(info && newer(info.version, manifestVersion()) ? info.version : null);
+    };
+    void read();
+    return onStorageChange(keys => keys.includes(UPDATE_KEY) && void read());
+  }, []);
   const [nextReminder, setNextReminder] = useState<Reminder | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState(acc?.name ?? '');
@@ -245,10 +255,10 @@ export default function SettingsScreen() {
           </a>
           <span aria-hidden="true">·</span>
           <button
-            onClick={() => void chrome.tabs.create({ url: chrome.runtime.getURL('update.html') })}
-            className="hover:text-txt hover:underline"
+            onClick={() => void chrome.tabs.create({ url: chrome.runtime.getURL(updateTo ? 'update.html?go=1' : 'update.html') })}
+            className={updateTo ? 'font-semibold text-acc hover:underline' : 'hover:text-txt hover:underline'}
           >
-            Check for updates
+            {updateTo ? `Update to ${updateTo}` : 'Check for updates'}
           </button>
           <span aria-hidden="true">·</span>
           <a href={`${API_URL}/privacy`} target="_blank" rel="noreferrer" className="hover:text-txt hover:underline">
