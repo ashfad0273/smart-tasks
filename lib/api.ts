@@ -69,5 +69,9 @@ export const api = {
   pull: (token: string, since: number) =>
     call<{ rev: number; changes: Change[]; more: boolean }>(`/v1/sync?since=${since}`, { token }),
   push: (token: string, ops: SyncOp[]) => call<{ rev: number }>('/v1/sync', { ...post({ ops }), token }),
+  agentToken: (token: string) =>
+    call<{ token: { hint: string; createdAt: number; lastUsed: number | null } | null }>('/v1/agent-token', { token }),
+  createAgentToken: (token: string, timeZone: string) => call<{ token: string }>('/v1/agent-token', { ...post({ timeZone }), token }),
+  revokeAgentToken: (token: string) => call<{ ok: true }>('/v1/agent-token', { method: 'DELETE', token }),
   wsUrl: (token: string) => `${API_URL.replace(/^http/, 'ws')}/v1/ws?token=${encodeURIComponent(token)}`,
 };

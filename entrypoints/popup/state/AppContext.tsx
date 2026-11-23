@@ -19,7 +19,7 @@ import {
 import type { AccountInfo, Category, DataSet, Registry, SyncOp, SyncState, SyncStatus, Task, TaskPatch } from '../../../lib/types';
 import { cheer, descErr, friendlyAuthError, hueFromString } from '../../../lib/utils';
 
-export type Screen = 'welcome' | 'login' | 'signup' | 'reset' | 'dashboard' | 'categories' | 'settings';
+export type Screen = 'welcome' | 'login' | 'signup' | 'reset' | 'dashboard' | 'categories' | 'settings' | 'agent';
 export type Tab = 'all' | 'pending' | 'completed';
 export type ToastKind = 'info' | 'error' | 'success';
 export interface Toast {

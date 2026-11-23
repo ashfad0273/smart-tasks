@@ -53,6 +53,14 @@ export class UserHub extends DurableObject<Env> {
     return { rev: more ? page[page.length - 1].rev : this.rev(), changes, more };
   }
 
+  /** Every live (not deleted) record of one kind, for the agent API. */
+  list(kind: 'task' | 'category'): Array<Record<string, unknown> & { id: string }> {
+    return this.sql
+      .exec<{ id: string; data: string }>(`SELECT id, data FROM items WHERE kind = ? AND deleted = 0`, kind)
+      .toArray()
+      .map(r => ({ ...(JSON.parse(r.data) as Record<string, unknown>), id: r.id }));
+  }
+
   push(ops: SyncOp[]): { rev: number } {
     if (ops.length === 0) return { rev: this.rev() };
     let rev = this.rev();

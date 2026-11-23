@@ -1,5 +1,6 @@
 import { hashPassword, randomToken, sha256, verifyGoogleIdToken, verifyPassword } from './crypto';
 import { BadRequest, parseOps } from './model';
+import { handleMcp } from './mcp';
 import { PRIVACY_HTML } from './privacy';
 
 export { UserHub } from './hub';
@@ -20,6 +21,10 @@ export { UserHub } from './hub';
  *   GET    /v1/sync?since=REV         → {rev, changes, more}
  *   POST   /v1/sync                   {ops}  → {rev}
  *   GET    /v1/ws?token=…             WebSocket: {"type":"rev","rev":N} on every change
+ *   GET    /v1/agent-token            → {token: {hint, createdAt, lastUsed} | null}
+ *   POST   /v1/agent-token            {timeZone} → {token: "stk_…"}  (replaces any old one)
+ *   DELETE /v1/agent-token            revoke
+ *   POST   /mcp                       MCP endpoint for AI agents (Bearer stk_… token)
  */
 
 const SESSION_TTL = 180 * 86_400_000;
@@ -47,7 +52,7 @@ class HttpError extends Error {
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type, Mcp-Protocol-Version, Mcp-Session-Id',
   'Access-Control-Max-Age': '86400',
 };
 
@@ -116,6 +121,36 @@ function validateEmail(email: unknown): string {
   const e = typeof email === 'string' ? email.trim().toLowerCase() : '';
   if (!EMAIL_RE.test(e) || e.length > 254) throw new HttpError(400, 'invalid-email', "That email address doesn't look right.");
   return e;
+}
+
+const AGENT_PREFIX = 'stk_';
+
+function validZone(tz: unknown): string {
+  if (typeof tz !== 'string' || !tz || tz.length > 64) return 'UTC';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return tz;
+  } catch {
+    return 'UTC';
+  }
+}
+
+async function agentAuth(env: Env, token: string | null): Promise<{ user: UserRow; tz: string }> {
+  if (!token?.startsWith(AGENT_PREFIX)) {
+    throw new HttpError(401, 'unauthenticated', 'Send your Smart Tasks agent token as "Authorization: Bearer stk_…". Create one in Smart Tasks → Settings → AI agent.');
+  }
+  const hash = await sha256(token);
+  const row = await env.DB.prepare(
+    `SELECT u.*, a.time_zone, a.last_used FROM agent_tokens a JOIN users u ON u.id = a.user_id WHERE a.token_hash = ?`,
+  )
+    .bind(hash)
+    .first<UserRow & { time_zone: string; last_used: number | null }>();
+  if (!row) throw new HttpError(401, 'token-revoked', 'This agent token is no longer valid. Create a new one in Smart Tasks → Settings → AI agent.');
+  const now = Date.now();
+  if (!row.last_used || now - row.last_used > 10 * 60_000) {
+    await env.DB.prepare('UPDATE agent_tokens SET last_used = ? WHERE token_hash = ?').bind(now, hash).run();
+  }
+  return { user: row, tz: row.time_zone || 'UTC' };
 }
 
 /* ── handlers ──────────────────────────────────────────────────────────── */
@@ -255,6 +290,11 @@ async function route(req: Request, env: Env): Promise<Response> {
     if (p === '/v1/auth/reset/confirm') return resetConfirm(req, env);
   }
 
+  if (p === '/mcp') {
+    const { user, tz } = await agentAuth(env, bearer(req));
+    return handleMcp(req, { hub: hub(env, user.id), name: user.name, tz }, { 'Cache-Control': 'no-store', ...CORS });
+  }
+
   // WebSocket: browsers can't set headers on WS, so the token rides in the query.
   if (p === '/v1/ws') {
     if (req.headers.get('Upgrade') !== 'websocket') throw new HttpError(426, 'upgrade-required', 'Expected WebSocket');
@@ -283,8 +323,33 @@ async function route(req: Request, env: Env): Promise<Response> {
       await env.DB.batch([
         env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id),
         env.DB.prepare('DELETE FROM reset_codes WHERE user_id = ?').bind(user.id),
+        env.DB.prepare('DELETE FROM agent_tokens WHERE user_id = ?').bind(user.id),
         env.DB.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
       ]);
+      return json({ ok: true });
+    }
+  }
+  if (p === '/v1/agent-token') {
+    if (m === 'GET') {
+      const row = await env.DB.prepare('SELECT hint, created_at, last_used FROM agent_tokens WHERE user_id = ?')
+        .bind(user.id)
+        .first<{ hint: string; created_at: number; last_used: number | null }>();
+      return json({ token: row ? { hint: row.hint, createdAt: row.created_at, lastUsed: row.last_used } : null });
+    }
+    if (m === 'POST') {
+      const b = await readJson<{ timeZone?: string }>(req).catch(() => ({}) as { timeZone?: string });
+      const token = AGENT_PREFIX + randomToken();
+      await env.DB.prepare(
+        `INSERT INTO agent_tokens (user_id, token_hash, hint, time_zone, created_at, last_used) VALUES (?, ?, ?, ?, ?, NULL)
+         ON CONFLICT (user_id) DO UPDATE SET token_hash = excluded.token_hash, hint = excluded.hint,
+           time_zone = excluded.time_zone, created_at = excluded.created_at, last_used = NULL`,
+      )
+        .bind(user.id, await sha256(token), token.slice(-4), validZone(b.timeZone), Date.now())
+        .run();
+      return json({ token });
+    }
+    if (m === 'DELETE') {
+      await env.DB.prepare('DELETE FROM agent_tokens WHERE user_id = ?').bind(user.id).run();
       return json({ ok: true });
     }
   }
