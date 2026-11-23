@@ -7,7 +7,6 @@ import {
   FolderOpen,
   Hash,
   Layers,
-  SlidersHorizontal,
   ListPlus,
   Plus,
   Search,
@@ -240,9 +239,9 @@ export default function Dashboard() {
       </form>
 
       {/* Category pills */}
-      <div className="mt-4 flex items-center pr-6">
+      <div className="mt-4 flex items-center">
       <div className="min-w-0 flex-1">
-      <ScrollRow className="gap-2 py-0.5 pl-6 pr-3">
+      <ScrollRow className="gap-2 px-6 py-0.5">
         <Pill active={app.filter === 'all'} onClick={() => app.setFilter('all')}>
           <Layers size={12} /> Everything
         </Pill>
@@ -255,14 +254,6 @@ export default function Dashboard() {
         ))}
       </ScrollRow>
       </div>
-        <button
-          aria-label="Add or edit categories"
-          title="Add or edit categories"
-          onClick={() => app.setScreen('categories')}
-          className="press ml-1 flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-acc/25 bg-acc/10 px-3 text-[12px] font-medium text-acc hover:bg-acc/15"
-        >
-          <SlidersHorizontal size={12} /> Edit
-        </button>
       </div>
 
       {/* Tabs + search */}
