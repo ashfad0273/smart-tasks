@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, ChevronLeft, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { Check, ChevronLeft, MoreVertical, Pencil, Trash2, Tags } from 'lucide-react';
 import type { Category } from '../../../lib/types';
 import { useApp } from '../state/AppContext';
 import EmptyState from '../components/EmptyState';
@@ -39,7 +39,7 @@ export default function CategoriesScreen() {
 
       <div className="hide-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto px-4">
         {app.categories.length === 0 ? (
-          <EmptyState emoji="🗂️" title="No categories yet" sub="Categories keep work, home and side quests apart. Make one below!" />
+          <EmptyState icon={Tags} title="No categories yet" sub="Categories keep work, home and side projects apart. Create one below." />
         ) : (
           app.categories.map((c, i) => {
             const active = app.filter === c.id;
@@ -58,9 +58,9 @@ export default function CategoriesScreen() {
                   }}
                 >
                   <span className="grid h-7 w-7 shrink-0 place-items-center rounded-xl text-xs font-semibold text-white" style={{ background: c.color }}>{c.name.slice(0, 1).toUpperCase()}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-bold">{c.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">{c.name}</span>
                   <span className="shrink-0 text-xs text-mut">
-                    {n ? `${n} to do` : 'all clear ✓'}
+                    {n ? `${n} to do` : 'all clear'}
                   </span>
                   {active && <Check size={14} className="shrink-0 text-acc" />}
                 </button>

@@ -1,4 +1,5 @@
 import { defineBackground } from 'wxt/utils/define-background';
+import { signInWithGoogle } from '../lib/auth';
 import { storageGet, storageSet } from '../lib/ext';
 import { REGISTRY_KEY, REMINDERS_ENABLED_KEY, REMINDERS_KEY, REMINDERS_SENT_KEY, baseKey, outboxKey } from '../lib/keys';
 import { GRACE_MS, writeReminders, type Reminder } from '../lib/reminders';
@@ -65,9 +66,9 @@ export default defineBackground(() => {
           chrome.notifications.create(`st-reminder:${r.id}`, {
             type: 'basic',
             iconUrl: chrome.runtime.getURL('icon/128.png'),
-            title: '⏰ Task due',
+            title: 'Task due',
             message: r.title,
-            buttons: [{ title: '✓ Mark done' }, { title: '💤 Snooze 10 min' }],
+            buttons: [{ title: 'Mark done' }, { title: 'Snooze 10 min' }],
             priority: 2,
             requireInteraction: true,
           });
@@ -119,7 +120,7 @@ export default defineBackground(() => {
     chrome.notifications.create(`st-saved:${now}`, {
       type: 'basic',
       iconUrl: chrome.runtime.getURL('icon/128.png'),
-      title: '✨ Saved to Smart Tasks',
+      title: 'Saved to Smart Tasks',
       message: title.slice(0, 120),
     });
     setTimeout(() => chrome.notifications.clear(`st-saved:${now}`), 4000);
@@ -170,6 +171,27 @@ export default defineBackground(() => {
   });
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === 'st-google-signin' && typeof msg.clientId === 'string') {
+      signInWithGoogle(msg.clientId)
+        .then(r => {
+          sendResponse({ ok: true, importedLocal: r.importedLocal });
+          void syncAll();
+        })
+        .catch((e: unknown) => {
+          const error = e instanceof Error ? e.message : String(e);
+          sendResponse({ ok: false, error });
+          // The popup may have closed while Google's window was open: tell the user.
+          if (!/cancelled/i.test(error)) {
+            chrome.notifications.create(`st-auth:${Date.now()}`, {
+              type: 'basic',
+              iconUrl: chrome.runtime.getURL('icon/128.png'),
+              title: 'Google sign-in failed',
+              message: error.slice(0, 200),
+            });
+          }
+        });
+      return true;
+    }
     if (msg?.type === 'st-add-task' && typeof msg.title === 'string' && msg.title.trim()) {
       void addTask(msg.title.trim(), typeof msg.url === 'string' ? msg.url : null).then(sendResponse);
       return true;

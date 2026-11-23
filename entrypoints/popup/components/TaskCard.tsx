@@ -111,7 +111,7 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
         )}
 
         {(cat || due || task.subtasks.length > 0 || task.url) && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10.5px] font-semibold">
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
             {cat && (
               <button
                 onClick={() => app.setFilter(cat.id)}
@@ -156,7 +156,7 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+      <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-md bg-surface/95 opacity-0 shadow-[0_0_12px_8px_var(--color-surface)] transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
         <button
           aria-label={`Edit "${task.title}"`}
           onClick={() => app.openEdit(task.id)}

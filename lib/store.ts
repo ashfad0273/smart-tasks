@@ -235,8 +235,8 @@ export function welcomeTaskOps(categoryOps: SyncOp[]): SyncOp[] {
     data: { title, order: now - i, createdAt: now - i, updatedAt: now - i, ...extra },
   });
   return [
-    t('👋 Tap the circle to complete me', { priority: 'high' }, 0),
-    t('✏️ Tap a task to edit, schedule or add subtasks', {
+    t('Tick the box to complete a task', { priority: 'high' }, 0),
+    t('Click a task to edit, schedule or add subtasks', {
       categoryId: personal,
       subtasks: [
         { id: uid4(), title: 'Pick a priority', done: false },
@@ -244,7 +244,7 @@ export function welcomeTaskOps(categoryOps: SyncOp[]): SyncOp[] {
         { id: uid4(), title: 'Drag subtasks to reorder', done: false },
       ],
     }, 1),
-    t('🖱️ Right-click any web page to save it here', { dueAt: tonight.getTime(), priority: 'low' }, 2),
+    t('Right-click any web page to save it here', { dueAt: tonight.getTime(), priority: 'low' }, 2),
   ];
 }
 

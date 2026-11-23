@@ -1,5 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarClock, Flame, Hash, Plus, Search, Settings as SettingsIcon, Sparkles, Star, X } from 'lucide-react';
+import {
+  CalendarClock,
+  CircleCheckBig,
+  CircleDashed,
+  Flame,
+  FolderOpen,
+  Hash,
+  Layers,
+  ListPlus,
+  Plus,
+  Search,
+  SearchX,
+  Settings as SettingsIcon,
+  Sparkles,
+  Star,
+  X,
+} from 'lucide-react';
 import { cx, formatDue, parseQuickAdd, PRIORITY_META } from '../../../lib/utils';
 import { useApp, type Tab } from '../state/AppContext';
 import Avatar from '../components/Avatar';
@@ -9,11 +25,11 @@ import ProgressRing from '../components/ProgressRing';
 import SyncBadge from '../components/SyncBadge';
 import TaskCard from '../components/TaskCard';
 
-function greetingFor(h: number): { text: string; emoji: string } {
-  if (h < 5) return { text: 'Burning the midnight oil', emoji: '🦉' };
-  if (h < 12) return { text: 'Good morning', emoji: '☀️' };
-  if (h < 18) return { text: 'Good afternoon', emoji: '🌤️' };
-  return { text: 'Good evening', emoji: '🌙' };
+function greetingFor(h: number): string {
+  if (h < 5) return 'Burning the midnight oil';
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
 }
 
 function Pill({ active, onClick, children, color }: { active: boolean; onClick: () => void; children: React.ReactNode; color?: string }) {
@@ -113,22 +129,22 @@ export default function Dashboard() {
   const ringTotal = app.counts.doneToday + app.counts.dueToday;
   const subtitle =
     app.counts.dueToday > 0
-      ? `${app.counts.dueToday} due today${app.counts.doneToday ? ` · ${app.counts.doneToday} done 💪` : ''}`
+      ? `${app.counts.dueToday} due today${app.counts.doneToday ? ` · ${app.counts.doneToday} done` : ''}`
       : app.counts.pending === 0
         ? app.tasks.length
-          ? 'All caught up — enjoy it 🎉'
-          : 'A fresh start ✨'
+          ? 'All caught up'
+          : 'A fresh start'
         : `${app.counts.pending} thing${app.counts.pending === 1 ? '' : 's'} on your plate`;
 
   const empty = app.query
-    ? { emoji: '🔍', title: 'No matches', sub: `Nothing matches “${app.query}”.` }
+    ? { icon: SearchX, title: 'No matches', sub: `Nothing matches “${app.query}”.` }
     : app.tasks.length === 0
-      ? { emoji: '🌱', title: 'Plant your first task', sub: 'Type above and hit Enter. It syncs to your other devices instantly.' }
+      ? { icon: ListPlus, title: 'Add your first task', sub: 'Type above and hit Enter. It syncs to your other devices instantly.' }
       : app.tab === 'completed'
-        ? { emoji: '🏁', title: 'Nothing finished yet', sub: 'Tick something off and it lands here.' }
+        ? { icon: CircleDashed, title: 'Nothing finished yet', sub: 'Tick something off and it lands here.' }
         : app.tab === 'pending'
-          ? { emoji: '🏖️', title: 'Inbox zero!', sub: 'Nothing left here. Go stretch, hydrate, or add something new.' }
-          : { emoji: '🫥', title: 'Nothing here', sub: 'No tasks in this category yet.' };
+          ? { icon: CircleCheckBig, title: 'Inbox zero', sub: 'Nothing left here. Go stretch, hydrate, or add something new.' }
+          : { icon: FolderOpen, title: 'Nothing here', sub: 'No tasks in this category yet.' };
 
   return (
     <div className="ambient flex h-full flex-col bg-bg">
@@ -139,8 +155,8 @@ export default function Dashboard() {
           <p className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-[12px] font-semibold tracking-[.02em] text-mut">
             <Star size={12} className="shrink-0 fill-pop text-pop" />
             <span className="truncate">
-              {g.text}
-              {firstName ? `, ${firstName}` : ''} <span aria-hidden="true">{g.emoji}</span>
+              {g}
+              {firstName ? `, ${firstName}` : ''}
             </span>
           </p>
           <div className="flex shrink-0 items-center gap-1">
@@ -175,7 +191,7 @@ export default function Dashboard() {
           onClick={app.startAddAccount}
           className="press mx-5 mt-3 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-left text-[11px] font-semibold leading-relaxed text-[#fda4af]"
         >
-          🔒 Your session for {acc.email} expired. Tap to sign in again — your offline changes are kept.
+          Your session for {acc.email} expired. Tap to sign in again — your offline changes are kept.
         </button>
       )}
       {acc?.local && (
@@ -211,7 +227,7 @@ export default function Dashboard() {
             <Plus size={14} strokeWidth={2.5} /> Add
           </button>
         </div>
-        <div className="mt-1.5 flex min-h-[20px] flex-wrap items-center gap-1 px-2 text-[10.5px] font-semibold">
+        <div className="mt-1.5 flex min-h-[20px] flex-wrap items-center gap-1 px-2 text-[11px] font-semibold">
           {quick.trim() ? (
             <>
               {parsed.dueAt && (
@@ -246,9 +262,9 @@ export default function Dashboard() {
       </form>
 
       {/* Category pills */}
-      <div className="hide-scrollbar mt-1.5 flex items-center gap-1.5 overflow-x-auto px-5 pb-1">
+      <div className="hide-scrollbar fade-x mt-1.5 flex items-center gap-1.5 overflow-x-auto px-5 pb-1">
         <Pill active={app.filter === 'all'} onClick={() => app.setFilter('all')}>
-          ✨ Everything
+          <Layers size={12} /> Everything
         </Pill>
         {app.categories.map(c => (
           <Pill key={c.id} active={app.filter === c.id} color={c.color} onClick={() => app.setFilter(app.filter === c.id ? 'all' : c.id)}>
@@ -335,7 +351,7 @@ export default function Dashboard() {
 
       <div className="hide-scrollbar mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto px-5 pb-6">
         {app.visibleTasks.length === 0 ? (
-          <EmptyState emoji={empty.emoji} title={empty.title} sub={empty.sub}>
+          <EmptyState icon={empty.icon} title={empty.title} sub={empty.sub}>
             {app.tasks.length === 0 && !app.query && (
               <button
                 onClick={() => addRef.current?.focus()}
@@ -359,9 +375,9 @@ export default function Dashboard() {
               });
               if (ok) void app.clearCompleted();
             }}
-            className="press mx-auto mt-2 block rounded-full px-3 py-1.5 text-[11px] font-bold text-mut hover:bg-surface hover:text-danger"
+            className="press mx-auto mt-2 block rounded-full px-3 py-1.5 text-[11px] font-semibold text-mut hover:bg-surface hover:text-danger"
           >
-            🧹 Clear completed
+            Clear completed
           </button>
         )}
       </div>

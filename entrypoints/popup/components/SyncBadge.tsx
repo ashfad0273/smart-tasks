@@ -26,7 +26,7 @@ export default function SyncBadge({ state, onClick }: { state: SyncState; onClic
       disabled={!onClick || state === 'local'}
       title={tip}
       aria-label={`Sync status: ${m.label}. ${tip}`}
-      className="press inline-flex items-center gap-1.5 rounded-full border border-line bg-surface/80 px-2.5 py-1 text-[11px] font-bold backdrop-blur disabled:cursor-default"
+      className="press inline-flex items-center gap-1.5 rounded-full border border-line bg-surface/80 px-2.5 py-1 text-[11px] font-semibold backdrop-blur disabled:cursor-default"
     >
       {state === 'offline' ? (
         <CloudOff size={11} style={{ color: m.color }} />

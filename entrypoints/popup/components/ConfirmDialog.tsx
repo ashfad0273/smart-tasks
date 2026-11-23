@@ -40,7 +40,7 @@ export default function ConfirmDialog() {
         <div className="mt-5 flex gap-2">
           <button
             onClick={() => resolveConfirm(false)}
-            className="press flex-1 rounded-full border border-line bg-surface2 py-2.5 text-xs font-bold text-txt hover:bg-line"
+            className="press flex-1 rounded-full border border-white/[.06] bg-white/[.04] py-2.5 text-xs font-semibold text-txt hover:bg-white/[.07]"
           >
             Never mind
           </button>

@@ -1,3 +1,5 @@
+import { Check, Minus } from 'lucide-react';
+
 /** Today's progress: completed today vs (completed today + still due today). */
 export default function ProgressRing({ done, total, size = 46 }: { done: number; total: number; size?: number }) {
   const pct = total === 0 ? 0 : Math.min(1, done / total);
@@ -34,7 +36,7 @@ export default function ProgressRing({ done, total, size = 46 }: { done: number;
         />
       </svg>
       <span className={`absolute text-[11px] font-semibold ${full ? 'anim-pop text-base' : ''}`}>
-        {full ? '🏆' : total ? `${Math.round(pct * 100)}%` : '☕'}
+        {full ? <Check size={16} strokeWidth={3} className="text-acc" /> : total ? `${Math.round(pct * 100)}%` : <Minus size={14} className="text-mut" />}
       </span>
     </div>
   );

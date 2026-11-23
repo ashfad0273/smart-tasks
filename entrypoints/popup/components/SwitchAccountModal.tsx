@@ -61,9 +61,9 @@ export default function SwitchAccountModal() {
                   <Avatar name={a.name} email={a.email} photoURL={a.photoURL} hue={a.hue} size={36} local={a.local} />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
-                      <span className="truncate text-sm font-bold">{a.local ? 'On this device' : a.name}</span>
+                      <span className="truncate text-sm font-semibold">{a.local ? 'On this device' : a.name}</span>
                       {active && (
-                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-acc/15 px-1.5 py-0.5 text-[10px] font-semibold text-acc">
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-acc/15 px-1.5 py-0.5 text-[10.5px] font-semibold text-acc">
                           <Check size={9} strokeWidth={3} /> Active
                         </span>
                       )}

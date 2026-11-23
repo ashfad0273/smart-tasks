@@ -38,7 +38,7 @@ export default function Sheet({ onClose, label, children }: { onClose: () => voi
         >
           <div className="mx-auto h-1.5 w-10 rounded-full bg-line" />
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">{children}</div>
       </div>
     </div>
   );

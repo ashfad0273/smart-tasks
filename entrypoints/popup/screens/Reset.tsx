@@ -22,19 +22,18 @@ export default function Reset() {
   return (
     <AuthShell
       title={sent ? 'Check your inbox' : 'Reset password'}
-      emoji={sent ? '📬' : '🔑'}
       sub={sent ? `If ${email} has an account, we sent it a 6-digit code.` : "Enter your email and we'll send you a code."}
       onBack={() => app.setScreen('login')}
     >
       {!sent ? (
-        <form onSubmit={request} className="mt-7 space-y-4">
+        <form onSubmit={request} className="mt-5 space-y-3">
           <Field label="Email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
           <PrimaryButton type="submit" busy={app.busy} disabled={app.busy || !email}>
             Send code
           </PrimaryButton>
         </form>
       ) : (
-        <form onSubmit={confirm} className="mt-7 space-y-3.5">
+        <form onSubmit={confirm} className="mt-5 space-y-3">
           <Field
             label="6-digit code"
             inputMode="numeric"
@@ -50,7 +49,7 @@ export default function Reset() {
           <PrimaryButton type="submit" busy={app.busy} disabled={app.busy || code.length !== 6 || password.length < 8}>
             Set new password
           </PrimaryButton>
-          <button type="button" onClick={() => setSent(false)} className="w-full text-center text-xs font-bold text-mut hover:text-txt">
+          <button type="button" onClick={() => setSent(false)} className="w-full text-center text-xs font-semibold text-mut hover:text-txt">
             Didn't get it? Try again
           </button>
         </form>

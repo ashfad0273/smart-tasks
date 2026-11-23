@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, type AuthResult, type ServerConfig } from '../../../lib/api';
+import { completeSignIn } from '../../../lib/auth';
 import { isExtension, onStorageChange, storageGet, storageSet } from '../../../lib/ext';
 import { baseKey, ONBOARDED_KEY, outboxKey, REGISTRY_KEY, statusKey } from '../../../lib/keys';
 import {
@@ -121,33 +122,6 @@ export function useApp(): AppCtx {
 
 const isPending = (t: Task) => !t.completedAt;
 const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Date(b).toDateString();
-
-async function googleIdToken(clientId: string): Promise<{ idToken: string; nonce: string }> {
-  if (!isExtension() || !chrome.identity?.launchWebAuthFlow) {
-    throw new Error('Google sign-in works inside the Chrome extension only.');
-  }
-  const nonce = newId();
-  const url =
-    'https://accounts.google.com/o/oauth2/v2/auth?' +
-    new URLSearchParams({
-      client_id: clientId,
-      response_type: 'id_token',
-      redirect_uri: chrome.identity.getRedirectURL(),
-      scope: 'openid email profile',
-      nonce,
-      prompt: 'select_account',
-    }).toString();
-  let responseUrl: string | undefined;
-  try {
-    responseUrl = await chrome.identity.launchWebAuthFlow({ url, interactive: true });
-  } catch {
-    throw new Error('Sign-in was cancelled.');
-  }
-  const params = new URLSearchParams(new URL(responseUrl ?? 'x:').hash.replace(/^#/, ''));
-  const idToken = params.get('id_token');
-  if (!idToken) throw new Error(params.get('error') === 'access_denied' ? 'Sign-in was cancelled.' : 'Google sign-in failed.');
-  return { idToken, nonce };
-}
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [booted, setBooted] = useState(false);
@@ -320,51 +294,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const finishAuth = useCallback(
     async (res: AuthResult) => {
-      const reg = await loadRegistry();
-      const prevActive = reg.accounts.find(a => a.uid === reg.activeId);
-      const acc: AccountInfo = {
-        uid: res.user.uid,
-        email: res.user.email,
-        name: res.user.name,
-        photoURL: res.user.photoURL ?? null,
-        hue: hueFromString(res.user.email),
-        token: res.token,
-        local: false,
-      };
-      const accounts = reg.accounts.filter(a => a.uid !== acc.uid);
-      accounts.push(acc);
-      await commitRegistry({ v: 2, accounts, activeId: acc.uid });
-      await storageSet(ONBOARDED_KEY, true);
-
-      // New account → starter categories, plus whatever was in a local-only
-      // account the user was using (so "sign up to sync" keeps their tasks).
-      if (res.created) {
-        const local = prevActive?.local ? prevActive : null;
-        let ops: SyncOp[];
-        if (local) {
-          const v = await readView(local.uid);
-          ops = [
-            ...Object.values(v.categories).map(c => ({ kind: 'category' as const, id: c.id, op: 'upsert' as const, data: { ...c } })),
-            ...Object.values(v.tasks).map(t => ({ kind: 'task' as const, id: t.id, op: 'upsert' as const, data: { ...t } })),
-          ];
-        } else {
-          const cats = defaultCategoryOps();
-          ops = [...cats, ...welcomeTaskOps(cats)];
-        }
-        await mutate(acc, ops);
-        if (local) {
-          await commitRegistry({ v: 2, accounts: accounts.filter(a => a.uid !== local.uid), activeId: acc.uid });
-          await purgeLocal(local.uid);
-          showToast('Your local tasks now sync everywhere ✨', 'success');
-        }
-      } else {
-        void sync(acc);
-      }
+      const { importedLocal } = await completeSignIn(res);
+      setRegistry(await loadRegistry());
+      if (importedLocal) showToast('Your local tasks now sync everywhere', 'success');
       resetView();
       setAddMode(false);
       setScreenRaw('dashboard');
     },
-    [commitRegistry, resetView, showToast],
+    [resetView, showToast],
   );
 
   const runAuth = useCallback(
@@ -393,11 +330,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = useCallback(async () => {
     const clientId = config?.googleClientId;
     if (!clientId) return;
-    await runAuth(async () => {
-      const { idToken, nonce } = await googleIdToken(clientId);
-      return api.google(idToken, nonce);
-    });
-  }, [config, runAuth]);
+    if (!isExtension()) {
+      showToast('Google sign-in works inside the Chrome extension only.', 'error');
+      return;
+    }
+    setBusy(true);
+    try {
+      // Runs in the background worker: Chrome closes this popup as soon as
+      // Google's window takes focus, which would otherwise kill the flow.
+      const res = (await chrome.runtime.sendMessage({ type: 'st-google-signin', clientId })) as
+        | { ok: true; importedLocal: boolean }
+        | { ok: false; error: string };
+      if (!res?.ok) throw new Error(res?.error || 'Google sign-in failed.');
+      setRegistry(await loadRegistry());
+      if (res.importedLocal) showToast('Your local tasks now sync everywhere', 'success');
+      resetView();
+      setAddMode(false);
+      setScreenRaw('dashboard');
+    } catch (e) {
+      showToast(friendlyAuthError(e), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }, [config, resetView, showToast]);
 
   const startLocal = useCallback(async () => {
     const reg = await loadRegistry();
@@ -487,7 +442,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       if (acc.token && !acc.local) await api.deleteAccount(acc.token);
       await removeFromDevice(acc.uid);
-      showToast('Account deleted. Bye for now 👋', 'success');
+      showToast('Account deleted', 'success');
     } catch (e) {
       showToast(descErr(e), 'error');
     }
@@ -605,7 +560,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const clearCompleted = useCallback(async () => {
     const done = Object.values(data.tasks).filter(t => t.completedAt);
     await write(done.map(t => ({ kind: 'task' as const, id: t.id, op: 'delete' as const })));
-    showToast(`Cleared ${done.length} completed task${done.length === 1 ? '' : 's'} 🧹`, 'success');
+    showToast(`Cleared ${done.length} completed task${done.length === 1 ? '' : 's'}`, 'success');
   }, [data.tasks, showToast, write]);
 
   const createCategory = useCallback<AppCtx['createCategory']>(

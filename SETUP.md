@@ -44,7 +44,7 @@ The extension reads the client ID from `GET /v1/config`, so you don't need to re
 
 ## 3. Optional: password-reset emails
 
-Password reset sends a 6-digit code using Cloudflare Email Sending. It is off until a sending domain is set up, and the "Forgot password?" link stays hidden until then.
+Password reset sends a 6-digit code using Cloudflare Email Sending. It is off until a sending domain is set up. Until then, "Forgot password?" on the sign-in screen shows a note pointing Gmail users to "Continue with Google".
 
 ```bash
 npx wrangler email sending enable yourdomain.com   # then add the DNS records it prints

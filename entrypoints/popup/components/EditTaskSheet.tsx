@@ -20,13 +20,12 @@ import Sheet from './Sheet';
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mt-4">
-      <span className="mb-1.5 block text-xs font-bold text-mut">{label}</span>
+      <span className="mb-1.5 block text-xs font-semibold text-mut">{label}</span>
       {children}
     </div>
   );
 }
 
-const PRIORITY_EMOJI: Record<Priority, string> = { low: '🌱', med: '⚡', high: '🔥' };
 
 export default function EditTaskSheet() {
   const app = useApp();
@@ -142,22 +141,28 @@ export default function EditTaskSheet() {
 
   return (
     <Sheet onClose={() => void requestClose()} label="Edit task">
-      <div className="px-4 pb-5">
+      <div className="px-4">
         <div className="flex items-center justify-between pb-2">
-          <h2 className="text-base font-semibold">Edit task ✏️</h2>
+          <h2 className="text-base font-semibold">Edit task</h2>
           <button onClick={() => void requestClose()} aria-label="Close" className="press rounded-lg p-1 text-mut hover:text-txt">
             <X size={16} />
           </button>
         </div>
 
-        <input
+        <textarea
           value={title}
           maxLength={500}
-          onChange={e => setTitle(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && void save()}
+          rows={1}
+          onChange={e => setTitle(e.target.value.replace(/\n/g, ' '))}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              void save();
+            }
+          }}
           placeholder="Task title"
           aria-label="Task title"
-          className="w-full rounded-2xl border border-line bg-surface2 px-3.5 py-2.5 text-sm font-bold outline-none focus:border-acc/60"
+          className="block max-h-24 min-h-[42px] w-full resize-none rounded-xl border border-white/[.06] bg-black/20 px-3.5 py-2.5 text-[13.5px] font-medium leading-snug outline-none [field-sizing:content] focus:border-acc/40 focus:shadow-[0_0_0_3px_rgba(63,209,197,.12)]"
         />
         <textarea
           value={notes}
@@ -173,7 +178,7 @@ export default function EditTaskSheet() {
             href={task.url}
             target="_blank"
             rel="noreferrer"
-            className="press mt-1 flex items-center gap-1.5 truncate rounded-xl bg-pop/10 px-3 py-2 text-[11px] font-bold text-pop hover:bg-pop/15"
+            className="press mt-1 flex items-center gap-1.5 truncate rounded-xl bg-pop/10 px-3 py-2 text-[11px] font-semibold text-pop hover:bg-pop/15"
           >
             <ExternalLink size={11} className="shrink-0" />
             <span className="truncate">{task.url.replace(/^https?:\/\//, '')}</span>
@@ -236,7 +241,7 @@ export default function EditTaskSheet() {
                 )}
                 style={priority === p ? { background: PRIORITY_META[p].color } : undefined}
               >
-                {PRIORITY_EMOJI[p]} {PRIORITY_META[p].label}
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: PRIORITY_META[p].color }} /> {PRIORITY_META[p].label}
               </button>
             ))}
           </div>
@@ -249,7 +254,7 @@ export default function EditTaskSheet() {
                 key={label}
                 onClick={() => setDueAt(dayAtTime(off, dueAt))}
                 className={cx(
-                  'press rounded-full border px-3 py-1.5 text-xs font-bold',
+                  'press rounded-full border px-3 py-1.5 text-xs font-semibold',
                   isDayActive(off) ? 'border-acc/50 bg-acc/15 text-acc' : 'border-line bg-surface2 text-mut hover:text-txt',
                 )}
               >
@@ -273,13 +278,13 @@ export default function EditTaskSheet() {
             {dueAt && (
               <button
                 onClick={() => setDueAt(null)}
-                className="press inline-flex items-center gap-1 rounded-full border border-line bg-surface2 px-3 py-1.5 text-xs font-bold text-mut hover:border-danger/40 hover:text-danger"
+                className="press inline-flex items-center gap-1 rounded-full border border-line bg-surface2 px-3 py-1.5 text-xs font-semibold text-mut hover:border-danger/40 hover:text-danger"
               >
                 <X size={10} /> Clear
               </button>
             )}
           </div>
-          {dueAt && <p className="mt-1.5 text-[11px] font-semibold text-mut">⏰ You'll get a reminder at this time.</p>}
+          {dueAt && <p className="mt-1.5 text-[11px] font-semibold text-mut">You'll get a reminder at this time.</p>}
         </Section>
 
         <Section label={`Subtasks${subtasks.length ? ` · ${doneSubs}/${subtasks.length}` : ''}`}>
@@ -387,10 +392,10 @@ export default function EditTaskSheet() {
           </div>
         </Section>
 
-        <div className="mt-5 flex gap-2">
+        <div className="sticky bottom-0 -mx-4 mt-4 flex gap-2 border-t border-white/[.05] bg-surface px-4 pb-4 pt-3">
           <button
             onClick={() => void remove()}
-            className="press inline-flex shrink-0 items-center gap-1.5 rounded-full border border-danger/30 px-3.5 py-2.5 text-xs font-bold text-danger hover:bg-danger/10"
+            className="press inline-flex shrink-0 items-center gap-1.5 rounded-full border border-danger/30 px-3.5 py-2.5 text-xs font-semibold text-danger hover:bg-danger/10"
           >
             <Trash2 size={13} /> Delete
           </button>

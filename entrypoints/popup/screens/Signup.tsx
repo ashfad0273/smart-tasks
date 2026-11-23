@@ -34,8 +34,7 @@ export default function Signup() {
   return (
     <AuthShell
       title={fromLocal ? 'Sync your tasks' : 'Create your account'}
-      emoji="🚀"
-      sub={fromLocal ? 'Your local tasks come along — nothing gets lost.' : 'Free forever for personal use. Takes ten seconds.'}
+      sub={fromLocal ? 'Your local tasks come along. Nothing gets lost.' : 'Free for personal use. Takes ten seconds.'}
       onBack={back}
     >
       {app.config?.googleClientId && (
@@ -43,7 +42,7 @@ export default function Signup() {
           <button
             onClick={() => void app.signInWithGoogle()}
             disabled={app.busy}
-            className="press mt-6 flex w-full items-center justify-center gap-2.5 rounded-full border border-line bg-surface2 py-2.5 text-sm font-bold text-txt hover:bg-line disabled:opacity-50"
+            className="press mt-5 flex w-full items-center justify-center gap-2.5 rounded-full border border-white/[.06] bg-white/[.04] py-2.5 text-[13.5px] font-semibold text-txt hover:bg-white/[.07] disabled:opacity-50"
           >
             <GoogleIcon size={16} /> Sign up with Google
           </button>
@@ -51,24 +50,26 @@ export default function Signup() {
         </>
       )}
 
-      <form key={shake} onSubmit={submit} className={`${app.config?.googleClientId ? '' : 'mt-6'} space-y-3 ${shake ? 'anim-shake' : ''}`}>
-        <Field label="What should we call you?" autoComplete="name" placeholder="Alex" value={name} maxLength={80} onChange={e => setName(e.target.value)} required autoFocus />
+      <form key={shake} onSubmit={submit} className={`${app.config?.googleClientId ? '' : 'mt-5'} space-y-3 ${shake ? 'anim-shake' : ''}`}>
+        <Field label="Your name" autoComplete="name" placeholder="Alex" value={name} maxLength={80} onChange={e => setName(e.target.value)} required autoFocus />
         <Field label="Email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required />
         <div>
           <Field label="Password" password autoComplete="new-password" placeholder="At least 8 characters" value={password} onChange={e => setPassword(e.target.value)} required />
-          <div className="mt-2">
-            <StrengthMeter pw={password} />
-          </div>
+          {password && (
+            <div className="anim-pop mt-2">
+              <StrengthMeter pw={password} />
+            </div>
+          )}
           {password && !pwOk && (
-            <p className="mt-1.5 text-[11px] font-semibold text-mut">
-              {checks.length ? 'Almost! Mix in a number, capital or symbol 💪' : `${8 - password.length} more character${8 - password.length === 1 ? '' : 's'} to go`}
+            <p className="mt-1 text-[11.5px] text-mut">
+              {checks.length ? 'Almost there. Mix in a number, capital or symbol.' : `${8 - password.length} more character${8 - password.length === 1 ? '' : 's'} to go`}
             </p>
           )}
         </div>
         <PrimaryButton type="submit" busy={app.busy} disabled={!canSubmit}>
           {fromLocal ? 'Create account & sync' : 'Create account'}
         </PrimaryButton>
-        <p className="text-center text-[10.5px] leading-relaxed text-mut/80">
+        <p className="text-center text-[11px] leading-relaxed text-mut/80">
           By continuing you agree to our{' '}
           <a href={`${API_URL}/privacy`} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-txt">
             privacy policy
@@ -77,7 +78,7 @@ export default function Signup() {
         </p>
       </form>
 
-      <p className="mt-4 text-center text-xs font-semibold text-mut">
+      <p className="mt-2.5 text-center text-[12.5px] text-mut">
         Already have an account?{' '}
         <button onClick={() => app.setScreen('login')} className="font-semibold text-acc underline-offset-2 hover:underline">
           Sign in

@@ -38,7 +38,7 @@ export default function CategoryModal() {
       <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] animate-[fadeIn_.12s_ease-out]" onClick={app.closeCategoryModal} />
       <div className="anim-pop relative w-full rounded-3xl border border-line bg-surface p-5 shadow-2xl">
         <h3 id="cat-title" className="text-base font-semibold">
-          {editing ? 'Edit category' : 'New category'} 🎨
+          {editing ? 'Edit category' : 'New category'}
         </h3>
 
         <div
@@ -57,21 +57,21 @@ export default function CategoryModal() {
             placeholder="e.g. Side hustle"
             maxLength={40}
             aria-label="Category name"
-            className="min-w-0 flex-1 bg-transparent text-sm font-bold outline-none placeholder:font-medium placeholder:text-mut/50"
+            className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:font-medium placeholder:text-mut/50"
           />
         </div>
-        {error && <p className="mt-1.5 text-[11px] font-bold text-danger">{error}</p>}
+        {error && <p className="mt-1.5 text-[11px] font-semibold text-danger">{error}</p>}
         {!editing && !name && (
           <div className="mt-2 flex flex-wrap gap-1">
             {EMOJI_SUGGESTIONS.filter(s => !app.categories.some(c => c.name === s)).slice(0, 4).map(s => (
-              <button key={s} onClick={() => setName(s)} className="press rounded-full bg-surface2 px-2 py-0.5 text-[11px] font-bold text-mut hover:text-txt">
+              <button key={s} onClick={() => setName(s)} className="press rounded-full bg-surface2 px-2 py-0.5 text-[11px] font-semibold text-mut hover:text-txt">
                 + {s}
               </button>
             ))}
           </div>
         )}
 
-        <p className="mb-2 mt-4 text-xs font-bold text-mut">Pick a color</p>
+        <p className="mb-2 mt-4 text-xs font-semibold text-mut">Pick a color</p>
         <div className="grid grid-cols-6 gap-2">
           {CATEGORY_COLORS.map(c => (
             <button
@@ -91,7 +91,7 @@ export default function CategoryModal() {
         </div>
 
         <div className="mt-5 flex gap-2">
-          <button onClick={app.closeCategoryModal} className="press flex-1 rounded-full border border-line bg-surface2 py-2.5 text-xs font-bold text-txt hover:bg-line">
+          <button onClick={app.closeCategoryModal} className="press flex-1 rounded-full border border-white/[.06] bg-white/[.04] py-2.5 text-xs font-semibold text-txt hover:bg-white/[.07]">
             Cancel
           </button>
           <button onClick={() => void save()} className="press btn-acc flex-1 rounded-full py-2.5 text-xs font-semibold">

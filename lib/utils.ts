@@ -220,5 +220,5 @@ export function parseQuickAdd(input: string): {
   return { title: title || input.trim(), dueAt, priority, categoryName };
 }
 
-const CHEERS = ['Nice! 🎉', 'Crushed it 💪', 'Boom! ✨', 'One down 🙌', 'Look at you go 🚀', 'Done & dusted 🧹', 'Smooth ⚡'];
+const CHEERS = ['Nice work', 'Done', 'One down', 'Task complete', 'Nicely done', 'Checked off'];
 export const cheer = () => CHEERS[Math.floor(Math.random() * CHEERS.length)];

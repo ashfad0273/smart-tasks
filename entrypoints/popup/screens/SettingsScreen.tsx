@@ -46,7 +46,7 @@ function ago(ms: number | null): string {
   return new Date(ms).toLocaleString([], { hour: 'numeric', minute: '2-digit', month: 'short', day: 'numeric' });
 }
 
-const btn = 'press flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface2 py-2 text-xs font-bold hover:bg-line';
+const btn = 'press flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface2 py-2 text-xs font-semibold hover:bg-line';
 
 export default function SettingsScreen() {
   const app = useApp();
@@ -131,7 +131,7 @@ export default function SettingsScreen() {
                     onChange={e => setName(e.target.value)}
                     onBlur={() => setEditingName(false)}
                     aria-label="Display name"
-                    className="w-full rounded-lg border border-acc/50 bg-surface2 px-2 py-1 text-sm font-bold outline-none"
+                    className="w-full rounded-lg border border-acc/50 bg-surface2 px-2 py-1 text-sm font-semibold outline-none"
                   />
                 </form>
               ) : (
@@ -153,7 +153,7 @@ export default function SettingsScreen() {
             </button>
             {acc?.local ? (
               <button onClick={() => app.setScreen('signup')} className="press btn-acc flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-xs font-semibold">
-                ✨ Sync my tasks
+                Sync my tasks
               </button>
             ) : (
               <button onClick={() => void signOut()} className={btn}>
@@ -185,10 +185,10 @@ export default function SettingsScreen() {
             <p className="mt-2.5 rounded-xl bg-surface2 px-2.5 py-2 text-[11px] leading-relaxed text-mut">
               {nextReminder ? (
                 <>
-                  ⏰ Next: <span className="font-bold text-acc">{formatDue(nextReminder.dueAt).label}</span> — {nextReminder.title}
+                  Next: <span className="font-semibold text-acc">{formatDue(nextReminder.dueAt).label}</span> — {nextReminder.title}
                 </>
               ) : (
-                '😴 Nothing scheduled. Give a task a date & time to get a reminder.'
+                'Nothing scheduled. Give a task a date and time to get a reminder.'
               )}
             </p>
           )}
@@ -205,7 +205,7 @@ export default function SettingsScreen() {
             ].map(([what, key]) => (
               <li key={what} className="flex items-center justify-between">
                 {what}
-                <kbd className="rounded-md border border-line bg-surface2 px-1.5 py-0.5 font-sans text-[10px] font-bold text-txt">{key}</kbd>
+                <kbd className="rounded-md border border-line bg-surface2 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-txt">{key}</kbd>
               </li>
             ))}
           </ul>
@@ -221,12 +221,12 @@ export default function SettingsScreen() {
               <Trash2 size={12} /> {acc?.local ? 'Erase all' : 'Delete account'}
             </button>
           </div>
-          <a href={`${API_URL}/privacy`} target="_blank" rel="noreferrer" className="mt-2.5 block text-[11px] font-bold text-mut underline-offset-2 hover:text-txt hover:underline">
+          <a href={`${API_URL}/privacy`} target="_blank" rel="noreferrer" className="mt-2.5 block text-[11px] font-semibold text-mut underline-offset-2 hover:text-txt hover:underline">
             Privacy policy ↗
           </a>
         </Card>
 
-        <p className="pt-1 text-center text-[11px] font-semibold text-mut/70">Smart Tasks v{manifestVersion()} · made with 💚</p>
+        <p className="pt-1 text-center text-[11px] font-semibold text-mut/70">Smart Tasks v{manifestVersion()}</p>
       </div>
     </div>
   );

@@ -13,7 +13,7 @@ export default function Field({ label, password, type, hint, ...rest }: Props) {
   const actualType = password ? (show ? 'text' : 'password') : (type ?? 'text');
   return (
     <div className="block">
-      <label htmlFor={id} className="mb-1.5 block text-xs font-bold text-mut">
+      <label htmlFor={id} className="mb-1 block text-[12px] font-medium text-mut">
         {label}
       </label>
       <div className="relative">
@@ -21,7 +21,7 @@ export default function Field({ label, password, type, hint, ...rest }: Props) {
           id={id}
           type={actualType}
           {...rest}
-          className="w-full rounded-2xl border border-line bg-surface2 px-3.5 py-2.5 text-sm font-semibold text-txt outline-none transition-all placeholder:font-medium placeholder:text-mut/50 focus:border-acc/60 focus:shadow-[0_0_0_4px_rgba(34,197,94,.12)]"
+          className={`w-full rounded-xl border border-white/[.06] bg-black/20 py-[9px] pl-3.5 text-[13.5px] text-txt outline-none transition-all placeholder:text-mut/60 focus:border-acc/40 focus:shadow-[0_0_0_3px_rgba(63,209,197,.12)] ${password ? 'pr-10' : 'pr-3.5'}`}
         />
         {password && (
           <button

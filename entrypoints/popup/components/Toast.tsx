@@ -15,7 +15,7 @@ export default function Toast() {
     >
       <div
         className={cx(
-          'pointer-events-auto flex max-w-full items-center gap-2 rounded-full border py-2 pl-4 text-xs font-bold shadow-2xl',
+          'pointer-events-auto flex max-w-full items-center gap-2 rounded-full border py-2 pl-4 text-xs font-semibold shadow-2xl',
           action ? 'pr-1.5' : 'pr-4',
           kind === 'error'
             ? 'border-danger/40 bg-[#2a1219] text-[#fda4af]'
