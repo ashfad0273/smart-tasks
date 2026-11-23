@@ -323,15 +323,23 @@ export default function Dashboard() {
           </EmptyState>
         ) : (
           sections.map((sec, si) => (
-            <section key={sec.key} className={si > 0 ? 'mt-5' : ''} aria-label={sec.label}>
-              {(sections.length > 1 || sec.key !== 'anytime') && (
+            <section
+              key={sec.key}
+              className="anim-pop transition-[margin] duration-300 ease-[var(--ease-out)]"
+              style={{ marginTop: si > 0 ? 20 : 0 }}
+              aria-label={sec.label}
+            >
+              {/* Always rendered so it can fold in/out when switching tabs instead of popping. */}
+              <div className="expander" data-open={sections.length > 1 || sec.key !== 'anytime'}>
+                <div>
                 <h2 className="mb-2 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: sec.tone }}>
                   <span className="h-1.5 w-1.5 rounded-full" style={{ background: sec.tone }} />
                   {sec.label}
-                  <span className="font-medium text-mut/60">{sec.tasks.length}</span>
+                  <span className="font-medium tabular-nums text-mut/60">{sec.tasks.length}</span>
                   <span className="h-px flex-1" style={{ background: `${sec.tone}26` }} />
                 </h2>
-              )}
+                </div>
+              </div>
               <div className="space-y-2.5">
                 {sec.tasks.map((t, i) => (
                   <TaskCard key={t.id} task={t} index={si * 2 + i} />
