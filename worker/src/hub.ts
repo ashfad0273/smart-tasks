@@ -9,6 +9,8 @@ import { BadRequest, categoryDefaults, LIMITS, taskDefaults, type Change, type S
  * Every write bumps a per-user monotonic revision. Clients pull
  * `changes since <rev>` — simple, gap-free, and offline-friendly.
  */
+const NOTICE_HOURLY_LIMIT = 30;
+
 export class UserHub extends DurableObject<Env> {
   private sql: SqlStorage;
 
@@ -22,6 +24,10 @@ export class UserHub extends DurableObject<Env> {
       );
       CREATE INDEX IF NOT EXISTS items_rev ON items(rev);
       CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS notices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, message TEXT NOT NULL,
+        url TEXT, created_at INTEGER NOT NULL
+      );
     `);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
@@ -120,6 +126,50 @@ export class UserHub extends DurableObject<Env> {
 
     this.broadcast(rev);
     return { rev };
+  }
+
+  /* ── agent notifications ─────────────────────────────────────────── */
+
+  /** Queue a desktop notification from an AI agent. Devices fetch it on their next check. */
+  notify(n: { title: string; message: string; url: string | null }): { id: number } | { error: string } {
+    const now = Date.now();
+    const recent = this.sql
+      .exec<{ n: number }>(`SELECT COUNT(*) AS n FROM notices WHERE created_at > ?`, now - 3600_000)
+      .one().n;
+    if (recent >= NOTICE_HOURLY_LIMIT) return { error: `Limit of ${NOTICE_HOURLY_LIMIT} notifications per hour reached. Try again later.` };
+    const id = this.sql
+      .exec<{ id: number }>(
+        `INSERT INTO notices (title, message, url, created_at) VALUES (?, ?, ?, ?) RETURNING id`,
+        n.title,
+        n.message,
+        n.url,
+        now,
+      )
+      .one().id;
+    this.sql.exec(`DELETE FROM notices WHERE created_at < ?`, now - 7 * 86_400_000);
+    const msg = JSON.stringify({ type: 'notice' });
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        ws.send(msg);
+      } catch {
+        /* socket closing */
+      }
+    }
+    return { id };
+  }
+
+  /** Notifications newer than `after` (a notice id) from the last day. */
+  notices(after: number): { latest: number; notices: Array<{ id: number; title: string; message: string; url: string | null; createdAt: number }> } {
+    const latest = this.sql.exec<{ v: number | null }>(`SELECT MAX(id) AS v FROM notices`).one().v ?? 0;
+    const notices = this.sql
+      .exec<{ id: number; title: string; message: string; url: string | null; created_at: number }>(
+        `SELECT id, title, message, url, created_at FROM notices WHERE id > ? AND created_at > ? ORDER BY id LIMIT 20`,
+        after,
+        Date.now() - 86_400_000,
+      )
+      .toArray()
+      .map(r => ({ id: r.id, title: r.title, message: r.message, url: r.url, createdAt: r.created_at }));
+    return { latest, notices };
   }
 
   /** Session ids with an open live connection right now. */

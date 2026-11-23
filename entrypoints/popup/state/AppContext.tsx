@@ -257,6 +257,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ws.onmessage = async e => {
         if (typeof e.data !== 'string' || !e.data.startsWith('{')) return;
         const msg = JSON.parse(e.data) as { type: string; rev: number };
+        if (msg.type === 'notice') {
+          // An AI agent sent a notification: let the service worker show it now.
+          globalThis.chrome?.runtime?.sendMessage?.({ type: 'st-check-notices' })?.catch(() => {});
+          return;
+        }
         if (msg.type !== 'rev') return;
         const base = await storageGet<DataSet>(baseKey(acc.uid), EMPTY_SET);
         if (msg.rev > base.rev) void sync(acc);

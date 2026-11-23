@@ -222,6 +222,21 @@ const TOOLS = [
     annotations: { readOnlyHint: true },
   },
   {
+    name: 'notify',
+    title: 'Send a notification',
+    description:
+      "Show a desktop notification in the user's browser (every device signed in to Smart Tasks). Use it sparingly: when the user asked to be told about something, or for something time-sensitive they would want to know now. Not for routine confirmations of task edits.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Short headline, up to 60 characters.' },
+        message: { type: 'string', description: 'The notification body, up to 240 characters.' },
+        url: { type: 'string', description: 'Optional http(s) link opened when the notification is clicked.' },
+      },
+      required: ['title', 'message'],
+    },
+  },
+  {
     name: 'create_category',
     title: 'Create a category',
     description: 'Create a category (returns the existing one if the name is taken).',
@@ -337,6 +352,24 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
       };
     }
 
+    case 'notify': {
+      const title = str(a.title, 'title', true)!.slice(0, 60);
+      const message = str(a.message, 'message', true)!.slice(0, 240);
+      let url = str(a.url, 'url') || null;
+      if (url) {
+        try {
+          const u = new URL(url);
+          if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error();
+          url = u.toString().slice(0, 2000);
+        } catch {
+          throw new ToolError('url must be an http(s) link');
+        }
+      }
+      const r = await ctx.hub.notify({ title, message, url });
+      if ('error' in r) throw new ToolError(r.error);
+      return { sent: true, note: 'Devices with Smart Tasks show it within about a minute (instantly if the popup is open).' };
+    }
+
     case 'create_category': {
       const n = str(a.name, 'name', true)!;
       const cats = await list(ctx, 'category');
@@ -369,7 +402,8 @@ async function handle(ctx: Ctx, msg: RpcMsg): Promise<object | null> {
         serverInfo: { name: 'smart-tasks', title: 'Smart Tasks', version: '1.0.0' },
         instructions:
           `Smart Tasks is ${ctx.name}'s to-do list (browser extension). Times are in ${ctx.tz}. ` +
-          'Call list_tasks before editing so you use real ids. Only delete when explicitly asked; prefer complete_task for "done".',
+          'Call list_tasks before editing so you use real ids. Only delete when explicitly asked; prefer complete_task for "done". ' +
+          'Use notify to ping the user on their desktop when they asked to be told about something.',
       });
     }
     case 'ping':

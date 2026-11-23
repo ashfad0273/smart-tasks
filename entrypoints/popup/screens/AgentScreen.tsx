@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bot, Check, ChevronLeft, Copy, KeyRound } from 'lucide-react';
+import { BellRing, Bot, Check, ChevronLeft, Copy, KeyRound } from 'lucide-react';
+import { storageGet, storageSet } from '../../../lib/ext';
+import { AGENT_NOTIFY_KEY } from '../../../lib/keys';
+import { Toggle } from './SettingsScreen';
 import { api, API_URL, ApiError } from '../../../lib/api';
 import { useApp } from '../state/AppContext';
 
@@ -21,6 +24,11 @@ export default function AgentScreen() {
   const [fresh, setFresh] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [notifyOn, setNotifyOn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    void storageGet<boolean>(AGENT_NOTIFY_KEY, true).then(setNotifyOn);
+  }, []);
 
   const fail = useCallback(
     (e: unknown) => app.showToast(e instanceof ApiError ? e.message : 'Something went wrong. Try again.', 'error'),
@@ -109,7 +117,7 @@ export default function AgentScreen() {
             <Bot size={17} />
           </span>
           <p className="text-[12.5px] leading-relaxed text-mut">
-            Let Claude or another AI agent add, edit and complete your tasks. Changes show up here instantly.
+            Let Claude or another AI agent add, edit and complete your tasks, and send you notifications. Changes show up here instantly.
           </p>
         </div>
 
@@ -159,6 +167,24 @@ export default function AgentScreen() {
                 >
                   {busy ? 'Creating...' : info ? 'Make a new key' : 'Create access key'}
                 </button>
+              )}
+            </section>
+
+            <section className="anim-card flex items-center gap-2.5 rounded-2xl border border-line bg-surface p-3.5">
+              <BellRing size={14} className="shrink-0 text-mut" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-medium">Agent notifications</p>
+                <p className="text-[11px] text-mut">Let your agent ping you on this computer when it has news.</p>
+              </div>
+              {notifyOn !== null && (
+                <Toggle
+                  label="Agent notifications"
+                  on={notifyOn}
+                  onChange={v => {
+                    setNotifyOn(v);
+                    void storageSet(AGENT_NOTIFY_KEY, v);
+                  }}
+                />
               )}
             </section>
 

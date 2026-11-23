@@ -1,7 +1,8 @@
 import { defineBackground } from 'wxt/utils/define-background';
 import { signInWithGoogle } from '../lib/auth';
 import { storageGet, storageSet } from '../lib/ext';
-import { REGISTRY_KEY, REMINDERS_ENABLED_KEY, REMINDERS_KEY, REMINDERS_SENT_KEY, baseKey, outboxKey } from '../lib/keys';
+import { api } from '../lib/api';
+import { AGENT_NOTIFY_KEY, NOTICE_LINKS_KEY, noticesSeenKey, REGISTRY_KEY, REMINDERS_ENABLED_KEY, REMINDERS_KEY, REMINDERS_SENT_KEY, baseKey, outboxKey } from '../lib/keys';
 import { GRACE_MS, writeReminders, type Reminder } from '../lib/reminders';
 import { activeAccount, loadRegistry, mutate, newId, readView, sync } from '../lib/store';
 import { isSameDay } from '../lib/utils';
@@ -13,6 +14,7 @@ import { isSameDay } from '../lib/utils';
  *  - reminder alarms + actionable notifications (Done / Snooze)
  *  - toolbar badge with today's open + overdue count
  *  - right-click capture of selections / pages
+ *  - notifications sent by the user's AI agent (MCP "notify" tool)
  */
 
 const SYNC_ALARM = 'st-sync';
@@ -83,6 +85,53 @@ export default defineBackground(() => {
     await scheduleNextReminder();
   }
 
+  /* ── agent notifications ──────────────────────────────────────────── */
+
+  // One check at a time, so a WS nudge and the minute alarm can't show a notice twice.
+  let noticeCheck: Promise<void> | null = null;
+  function checkNotices(): Promise<void> {
+    noticeCheck ??= (async () => {
+      try {
+        const reg = await loadRegistry();
+        const allowed = await storageGet<boolean>(AGENT_NOTIFY_KEY, true);
+        for (const a of reg.accounts) {
+          if (a.local || !a.token) continue;
+          const seen = await storageGet<number | null>(noticesSeenKey(a.uid), null);
+          let r;
+          try {
+            r = await api.notices(a.token, seen ?? 0);
+          } catch {
+            continue; // offline or signed out: try again next time
+          }
+          // First check on this device: only show what was sent in the last few minutes.
+          const fresh = seen == null ? r.notices.filter(n => n.createdAt > Date.now() - 10 * 60_000) : r.notices;
+          if (allowed && fresh.length) {
+            const links = await storageGet<Record<string, string>>(NOTICE_LINKS_KEY, {});
+            for (const n of fresh) {
+              const id = `st-agent:${a.uid}:${n.id}`;
+              chrome.notifications.create(id, {
+                type: 'basic',
+                iconUrl: chrome.runtime.getURL('icon/128.png'),
+                title: n.title,
+                message: n.message,
+                contextMessage: reg.accounts.filter(x => !x.local).length > 1 ? `From your AI agent · ${a.email}` : 'From your AI agent',
+                priority: 2,
+              });
+              if (n.url) links[id] = n.url;
+            }
+            const keep = Object.entries(links).slice(-50);
+            await storageSet(NOTICE_LINKS_KEY, Object.fromEntries(keep));
+          }
+          const last = Math.max(seen ?? 0, r.latest, ...r.notices.map(n => n.id));
+          if (last !== seen) await storageSet(noticesSeenKey(a.uid), last);
+        }
+      } finally {
+        noticeCheck = null;
+      }
+    })();
+    return noticeCheck;
+  }
+
   /* ── background sync ──────────────────────────────────────────────── */
 
   async function syncAll(): Promise<void> {
@@ -93,6 +142,7 @@ export default defineBackground(() => {
       const queued = (await storageGet<unknown[]>(outboxKey(a.uid), [])).length > 0;
       if (a.uid === reg.activeId || queued) await sync(a);
     }
+    await checkNotices();
   }
 
   /* ── quick capture ────────────────────────────────────────────────── */
@@ -192,6 +242,10 @@ export default defineBackground(() => {
         });
       return true;
     }
+    if (msg?.type === 'st-check-notices') {
+      void checkNotices();
+      return false;
+    }
     if (msg?.type === 'st-add-task' && typeof msg.title === 'string' && msg.title.trim()) {
       void addTask(msg.title.trim(), typeof msg.url === 'string' ? msg.url : null).then(sendResponse);
       return true;
@@ -210,6 +264,13 @@ export default defineBackground(() => {
   chrome.notifications.onClicked.addListener(id => {
     void chrome.notifications.clear(id);
     void (async () => {
+      if (id.startsWith('st-agent:')) {
+        const links = await storageGet<Record<string, string>>(NOTICE_LINKS_KEY, {});
+        if (links[id]) {
+          await chrome.tabs.create({ url: links[id] });
+          return;
+        }
+      }
       try {
         await chrome.action.openPopup();
       } catch {

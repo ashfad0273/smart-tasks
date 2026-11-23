@@ -27,6 +27,7 @@ export { UserHub } from './hub';
  *   GET    /v1/sessions               → {sessions: [{id, device, location, createdAt, lastSeen, current, online}], agent}
  *   DELETE /v1/sessions/:id           sign that device out
  *   DELETE /v1/sessions?others=1      sign out every other device
+ *   GET    /v1/notices?after=<id>     → {latest, notices: [{id, title, message, url, createdAt}]}  (agent notifications)
  *   POST   /mcp                       MCP endpoint for AI agents (Bearer stk_… token)
  */
 
@@ -389,6 +390,10 @@ async function route(req: Request, env: Env): Promise<Response> {
       ]);
       return json({ ok: true });
     }
+  }
+  if (p === '/v1/notices' && m === 'GET') {
+    const after = Math.max(0, Math.floor(Number(url.searchParams.get('after')) || 0));
+    return json(await hub(env, user.id).notices(after));
   }
   if (p === '/v1/sessions' && m === 'GET') {
     const [{ results }, agent, online] = await Promise.all([

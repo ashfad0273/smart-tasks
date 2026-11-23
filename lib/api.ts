@@ -66,6 +66,14 @@ export interface SessionsResult {
   agent: { hint: string; createdAt: number; lastUsed: number | null } | null;
 }
 
+export interface AgentNotice {
+  id: number;
+  title: string;
+  message: string;
+  url: string | null;
+  createdAt: number;
+}
+
 const post = (body: unknown) => ({ method: 'POST', body: JSON.stringify(body) });
 
 export const api = {
@@ -90,5 +98,6 @@ export const api = {
   sessions: (token: string) => call<SessionsResult>('/v1/sessions', { token }),
   signOutDevice: (token: string, id: string) => call<{ ok: true }>(`/v1/sessions/${encodeURIComponent(id)}`, { method: 'DELETE', token }),
   signOutOthers: (token: string) => call<{ ok: true; signedOut: number }>('/v1/sessions?others=1', { method: 'DELETE', token }),
+  notices: (token: string, after: number) => call<{ latest: number; notices: AgentNotice[] }>(`/v1/notices?after=${after}`, { token }),
   wsUrl: (token: string) => `${API_URL.replace(/^http/, 'ws')}/v1/ws?token=${encodeURIComponent(token)}`,
 };
