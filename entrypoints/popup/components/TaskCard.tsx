@@ -45,7 +45,9 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
   return (
     <div
       className={cx(
-        'anim-card group relative flex items-start gap-3 overflow-hidden rounded-xl border border-white/[.04] bg-white/[.015] px-4 py-3.5 transition-colors duration-200',
+        'anim-card group relative flex items-start gap-3 overflow-hidden border border-white/[.04] bg-white/[.015] px-4 py-3.5 transition-colors duration-200',
+        // Single-line cards (no chips row) get a tighter corner so they don't look like pills.
+        cat || due || task.url ? 'rounded-xl' : 'rounded-lg',
         'hover:bg-white/[.03] focus-within:bg-white/[.03]',
       )}
       style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
