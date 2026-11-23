@@ -248,7 +248,7 @@ export default function EditTaskSheet() {
                     : undefined
                 }
               >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: PRIORITY_META[p].color }} /> {PRIORITY_META[p].label}
+                {PRIORITY_META[p].label}
               </button>
             ))}
           </div>
