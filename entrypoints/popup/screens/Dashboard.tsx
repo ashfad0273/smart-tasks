@@ -13,7 +13,6 @@ import {
   SearchX,
   Settings as SettingsIcon,
   Sparkles,
-  Star,
   X,
 } from 'lucide-react';
 import { cx, formatDue, parseQuickAdd, PRIORITY_META } from '../../../lib/utils';
@@ -21,16 +20,9 @@ import { useApp, type Tab } from '../state/AppContext';
 import Avatar from '../components/Avatar';
 import Confetti from '../components/Confetti';
 import EmptyState from '../components/EmptyState';
-import ProgressRing from '../components/ProgressRing';
 import SyncBadge from '../components/SyncBadge';
 import TaskCard from '../components/TaskCard';
-
-function greetingFor(h: number): string {
-  if (h < 5) return 'Burning the midnight oil';
-  if (h < 12) return 'Good morning';
-  if (h < 18) return 'Good afternoon';
-  return 'Good evening';
-}
+import ScrollRow from '../components/ScrollRow';
 
 function Pill({ active, onClick, children, color }: { active: boolean; onClick: () => void; children: React.ReactNode; color?: string }) {
   return (
@@ -52,22 +44,17 @@ function Pill({ active, onClick, children, color }: { active: boolean; onClick: 
   );
 }
 
-const HINTS = ['Try “Call mom tomorrow 6pm”', 'Try “Ship it !high #work”', 'Try “Gym tonight”', 'Try “Pay rent next week !high”'];
-
 export default function Dashboard() {
   const app = useApp();
   const [quick, setQuick] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [shake, setShake] = useState(0);
-  const [hint] = useState(() => HINTS[Math.floor(Math.random() * HINTS.length)]);
   const addRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [party, setParty] = useState(0);
   const prevPending = useRef(app.counts.pending);
 
   const acc = app.account;
-  const firstName = (acc?.local ? '' : acc?.name || '').split(' ')[0];
-  const g = greetingFor(new Date().getHours());
 
   // Confetti when the last pending task gets checked off.
   useEffect(() => {
@@ -126,16 +113,6 @@ export default function Dashboard() {
   ];
   const tabIndex = tabs.findIndex(t => t.id === app.tab);
 
-  const ringTotal = app.counts.doneToday + app.counts.dueToday;
-  const subtitle =
-    app.counts.dueToday > 0
-      ? `${app.counts.dueToday} due today${app.counts.doneToday ? ` · ${app.counts.doneToday} done` : ''}`
-      : app.counts.pending === 0
-        ? app.tasks.length
-          ? 'All caught up'
-          : 'A fresh start'
-        : `${app.counts.pending} thing${app.counts.pending === 1 ? '' : 's'} on your plate`;
-
   const empty = app.query
     ? { icon: SearchX, title: 'No matches', sub: `Nothing matches “${app.query}”.` }
     : app.tasks.length === 0
@@ -150,46 +127,46 @@ export default function Dashboard() {
     <div className="ambient flex h-full flex-col bg-bg">
       <Confetti fire={party} />
 
-      <header className="px-5 pt-4">
-        <div className="flex items-center gap-2">
-          <p className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-[12px] font-semibold tracking-[.02em] text-mut">
-            <Star size={12} className="shrink-0 fill-pop text-pop" />
-            <span className="truncate">
-              {g}
-              {firstName ? `, ${firstName}` : ''}
-            </span>
-          </p>
-          <div className="flex shrink-0 items-center gap-1">
-            <SyncBadge state={app.sync} onClick={app.syncNow} />
-            <button
-              aria-label="Switch account"
-              onClick={() => app.setSwitcherOpen(true)}
-              className="press rounded-full p-0.5 hover:ring-2 hover:ring-line"
-            >
-              {acc && <Avatar name={acc.name} email={acc.email} photoURL={acc.photoURL} hue={acc.hue} size={26} local={acc.local} />}
-            </button>
-            <button
-              aria-label="Settings"
-              onClick={() => app.setScreen('settings')}
-              className="press hover-wiggle rounded-full p-1.5 text-mut hover:bg-surface hover:text-txt"
-            >
-              <SettingsIcon size={16} />
-            </button>
-          </div>
-        </div>
-        <div className="mt-1 flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-[20px] font-medium leading-tight tracking-[-.01em]">Organize your daily targets</h1>
-            <p className="mt-1 truncate text-[11.5px] text-mut">{subtitle}</p>
-          </div>
-          <ProgressRing done={app.counts.doneToday} total={ringTotal} size={44} />
+      <header className="flex items-center gap-3 px-6 pt-6">
+        <h1 className="min-w-0 flex-1 truncate text-[20px] font-medium leading-tight tracking-[-.01em]">Organize your daily targets</h1>
+        <div className="flex shrink-0 items-center gap-1">
+          {/* Only surface sync when something needs attention. */}
+          {(app.sync === 'offline' || app.sync === 'error') && <SyncBadge state={app.sync} onClick={app.syncNow} />}
+          <button
+            aria-label="Switch account"
+            onClick={() => app.setSwitcherOpen(true)}
+            className="press rounded-full p-0.5 hover:ring-2 hover:ring-line"
+          >
+            {acc && <Avatar name={acc.name} email={acc.email} photoURL={acc.photoURL} hue={acc.hue} size={26} local={acc.local} />}
+          </button>
+          <button
+            aria-label="Settings"
+            onClick={() => app.setScreen('settings')}
+            className="press hover-wiggle rounded-full p-1.5 text-mut hover:bg-surface hover:text-txt"
+          >
+            <SettingsIcon size={16} />
+          </button>
         </div>
       </header>
+
+      {app.counts.total > 0 && (
+        <div className="mt-3 flex items-center gap-3 px-6" title="Tasks completed">
+          <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/[.06]">
+            <div
+              className="grad-acc h-full rounded-full transition-[width] duration-700 ease-out"
+              style={{ width: `${Math.round((app.counts.completed / app.counts.total) * 100)}%` }}
+            />
+          </div>
+          <span className="shrink-0 text-[11.5px] tabular-nums text-mut">
+            <span className="text-txt">{app.counts.completed}</span> of {app.counts.total} done
+          </span>
+        </div>
+      )}
 
       {app.sessionExpired && acc && (
         <button
           onClick={app.startAddAccount}
-          className="press mx-5 mt-3 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-left text-[11px] font-semibold leading-relaxed text-[#fda4af]"
+          className="press mx-6 mt-4 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-left text-[11px] font-semibold leading-relaxed text-[#fda4af]"
         >
           Your session for {acc.email} expired. Tap to sign in again — your offline changes are kept.
         </button>
@@ -197,7 +174,7 @@ export default function Dashboard() {
       {acc?.local && (
         <button
           onClick={() => app.setScreen('signup')}
-          className="press mx-5 mt-3 flex items-center gap-2 rounded-xl border border-pop/25 bg-pop/10 px-3 py-2 text-left text-[11px] font-semibold leading-snug text-[#c4b5fd] hover:bg-pop/15"
+          className="press mx-6 mt-4 flex items-center gap-2.5 rounded-xl border border-pop/25 bg-pop/10 px-3.5 py-2.5 text-left text-[11.5px] font-semibold leading-snug text-[#c4b5fd] hover:bg-pop/15"
         >
           <Sparkles size={14} className="shrink-0" />
           <span>
@@ -208,7 +185,7 @@ export default function Dashboard() {
       )}
 
       {/* Quick add */}
-      <form onSubmit={addQuick} className="mt-4 px-5">
+      <form onSubmit={addQuick} className="mt-6 px-6">
         <div key={shake} className={cx('flex items-stretch gap-2', shake > 0 && 'anim-shake')}>
           <input
             ref={addRef}
@@ -227,8 +204,9 @@ export default function Dashboard() {
             <Plus size={14} strokeWidth={2.5} /> Add
           </button>
         </div>
-        <div className="mt-1.5 flex min-h-[20px] flex-wrap items-center gap-1 px-2 text-[11px] font-semibold">
-          {quick.trim() ? (
+        {quick.trim() && (
+        <div className="anim-pop mt-2 flex flex-wrap items-center gap-1 px-3 text-[11px] font-medium">
+          {(
             <>
               {parsed.dueAt && (
                 <span className="anim-pop inline-flex items-center gap-1 rounded-full bg-sun/15 px-2 py-0.5 text-sun">
@@ -255,14 +233,14 @@ export default function Dashboard() {
                 <span className="text-mut/70">Enter ↵ to add · use “tomorrow 5pm”, “!high”, “#work”</span>
               )}
             </>
-          ) : (
-            <span className="text-mut/60">{hint}</span>
           )}
         </div>
+        )}
       </form>
 
       {/* Category pills */}
-      <div className="hide-scrollbar fade-x mt-1.5 flex items-center gap-1.5 overflow-x-auto px-5 pb-1">
+      <div className="mt-4">
+      <ScrollRow className="gap-2 px-6 py-0.5">
         <Pill active={app.filter === 'all'} onClick={() => app.setFilter('all')}>
           <Layers size={12} /> Everything
         </Pill>
@@ -281,10 +259,11 @@ export default function Dashboard() {
         >
           <Plus size={11} />
         </button>
+      </ScrollRow>
       </div>
 
       {/* Tabs + search */}
-      <div className="mt-3 flex items-center gap-2 px-5">
+      <div className="mt-5 flex items-center gap-2 px-6">
         {searchOpen ? (
           <div className="anim-pop flex flex-1 items-center gap-2 rounded-full border border-white/[.04] bg-black/20 px-3.5 py-2 focus-within:border-acc/30">
             <Search size={13} className="text-mut" />
@@ -349,7 +328,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="hide-scrollbar mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto px-5 pb-6">
+      <div className="hide-scrollbar mt-5 min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-6">
         {app.visibleTasks.length === 0 ? (
           <EmptyState icon={empty.icon} title={empty.title} sub={empty.sub}>
             {app.tasks.length === 0 && !app.query && (

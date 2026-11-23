@@ -44,7 +44,7 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
   return (
     <div
       className={cx(
-        'anim-card group relative flex items-start gap-3 overflow-hidden rounded-lg border border-white/[.03] bg-white/[.012] px-3.5 py-2.5 transition-colors duration-200',
+        'anim-card group relative flex items-start gap-3 overflow-hidden rounded-xl border border-white/[.04] bg-white/[.015] px-4 py-3.5 transition-colors duration-200',
         'hover:bg-white/[.03] focus-within:bg-white/[.03]',
       )}
       style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
@@ -111,7 +111,7 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
         )}
 
         {(cat || due || task.subtasks.length > 0 || task.url) && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
             {cat && (
               <button
                 onClick={() => app.setFilter(cat.id)}
