@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ExternalLink, GripVertical, Plus, Trash2, X } from 'lucide-react';
 import {
   addDays,
+  CATEGORY_COLORS,
   cx,
   dateInputToMs,
   dayAtTime,
@@ -39,7 +40,7 @@ export default function EditTaskSheet() {
   const [dueAt, setDueAt] = useState<number | null>(task?.dueAt ?? null);
   const [subtasks, setSubtasks] = useState<Subtask[]>(() => (task?.subtasks ?? []).map(s => ({ ...s })));
 
-  const [catOpen, setCatOpen] = useState(false);
+  const [newCat, setNewCat] = useState<string | null>(null);
   const [newSub, setNewSub] = useState('');
   const [editingSub, setEditingSub] = useState<string | null>(null);
   const [editSubText, setEditSubText] = useState('');
@@ -85,7 +86,14 @@ export default function EditTaskSheet() {
 
   if (!task) return null;
 
-  const cat = app.categoryById(categoryId);
+  const createCat = async () => {
+    const name = newCat?.trim();
+    if (!name) return;
+    const existing = app.categories.find(c => c.name.toLowerCase() === name.toLowerCase());
+    const id = existing ? existing.id : await app.createCategory({ name, color: CATEGORY_COLORS[app.categories.length % CATEGORY_COLORS.length] });
+    if (id) setCategoryId(id);
+    setNewCat(null);
+  };
   const doneSubs = subtasks.filter(s => s.done).length;
 
   const isDayActive = (offset: number) => !!dueAt && isSameDay(dueAt, addDays(startOfDay(Date.now()), offset));
@@ -189,44 +197,60 @@ export default function EditTaskSheet() {
         )}
 
         <Section label="Category">
-          <div className="relative">
-            <button
-              onClick={() => setCatOpen(o => !o)}
-              aria-expanded={catOpen}
-              className="press flex w-full items-center justify-between rounded-2xl border border-line bg-surface2 px-3 py-2.5 text-sm font-semibold"
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                {cat ? (
-                  <>
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: cat.color }} />
-                    <span className="truncate">{cat.name}</span>
-                  </>
-                ) : (
-                  <span className="text-mut">No category</span>
-                )}
-              </span>
-              <ChevronDown size={14} className={cx('shrink-0 text-mut transition-transform', catOpen && 'rotate-180')} />
-            </button>
-            {catOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setCatOpen(false)} />
-                <div className="anim-pop absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-2xl border border-line bg-surface p-1 shadow-2xl">
-                  {[{ id: null as string | null, name: 'No category', color: '' }, ...app.categories].map(c => (
-                    <button
-                      key={c.id ?? 'none'}
-                      onClick={() => {
-                        setCategoryId(c.id);
-                        setCatOpen(false);
-                      }}
-                      className={cx('flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-sm hover:bg-surface2', !c.id && 'text-mut')}
-                    >
-                      {c.color && <span className="h-2.5 w-2.5 rounded-full" style={{ background: c.color }} />}
-                      <span className="truncate">{c.name}</span>
-                      {categoryId === c.id && <Check size={13} className="ml-auto shrink-0 text-acc" />}
-                    </button>
-                  ))}
-                </div>
-              </>
+          <div className="flex flex-wrap gap-1.5">
+            {app.categories.map(c => {
+              const on = categoryId === c.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setCategoryId(on ? null : c.id)}
+                  aria-pressed={on}
+                  className={cx(
+                    'press flex max-w-[160px] items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                    !on && 'border-white/[.06] bg-white/[.03] text-mut hover:text-txt',
+                  )}
+                  style={on ? { borderColor: c.color, color: c.color, background: `${c.color}14` } : undefined}
+                >
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: c.color }} />
+                  <span className="truncate">{c.name}</span>
+                </button>
+              );
+            })}
+            {newCat === null ? (
+              <button
+                onClick={() => setNewCat('')}
+                className="press flex items-center gap-1 rounded-full border border-dashed border-white/15 px-3 py-1.5 text-xs font-medium text-mut hover:border-acc/50 hover:text-acc"
+              >
+                <Plus size={12} /> New
+              </button>
+            ) : (
+              <form
+                onSubmit={e => {
+                  e.preventDefault();
+                  void createCat();
+                }}
+                className="anim-pop flex items-center gap-1 rounded-full border border-acc/40 bg-acc/5 py-0.5 pl-3 pr-0.5"
+              >
+                <input
+                  autoFocus
+                  value={newCat}
+                  maxLength={40}
+                  onChange={e => setNewCat(e.target.value)}
+                  onBlur={() => !newCat.trim() && setNewCat(null)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') {
+                      e.stopPropagation();
+                      setNewCat(null);
+                    }
+                  }}
+                  placeholder="Category name"
+                  aria-label="New category name"
+                  className="w-28 bg-transparent text-xs text-txt outline-none placeholder:text-mut/60"
+                />
+                <button type="submit" disabled={!newCat.trim()} aria-label="Create category" className="press grid h-6 w-6 place-items-center rounded-full bg-acc/15 text-acc disabled:opacity-40">
+                  <Check size={12} />
+                </button>
+              </form>
             )}
           </div>
         </Section>
