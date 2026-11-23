@@ -173,8 +173,8 @@ export default function EditTaskSheet() {
           onChange={e => setNotes(e.target.value)}
           placeholder="Add notes…"
           aria-label="Notes"
-          rows={notes ? 3 : 1}
-          className="mt-2 w-full resize-none rounded-2xl border border-transparent bg-transparent px-3.5 py-1.5 text-xs leading-relaxed text-txt outline-none placeholder:text-mut/50 focus:border-line focus:bg-surface2"
+          rows={1}
+          className="mt-1 block max-h-32 min-h-[28px] w-full resize-none border-0 bg-transparent px-3.5 py-1 text-[12.5px] leading-relaxed text-txt outline-none [field-sizing:content] placeholder:text-mut/50"
         />
         {task.url && (
           <a
