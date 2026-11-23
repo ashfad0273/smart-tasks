@@ -1,24 +1,25 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #0b0f17;
-  --color-surface: #121927;
-  --color-surface2: #1a2333;
-  --color-line: #243044;
-  --color-txt: #eef2f8;
-  --color-mut: #8f9bb0;
-  --color-acc: #22c55e;
-  --color-accdark: #16a34a;
-  --color-acc2: #2dd4bf;
-  --color-pop: #a78bfa;
+  --color-bg: #10191c;
+  --color-surface: #151f22;
+  --color-surface2: #1b282c;
+  --color-line: #24343a;
+  --color-txt: #ffffff;
+  --color-mut: #798a8e;
+  --color-acc: #3fd1c5;
+  --color-accdark: #2bb3a8;
+  --color-acc2: #5eead4;
+  --color-pop: #9d7bfa;
   --color-sun: #facc15;
   --color-danger: #f43f5e;
   --color-warn: #f59e0b;
-  --font-sans: "Nunito Variable", "Nunito", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
 }
 
 html {
   color-scheme: dark;
+  --bg-gradient: radial-gradient(circle at top left, #122c32 0%, #10191c 60%, #0d1112 100%);
 }
 
 html,
@@ -31,7 +32,7 @@ body {
   width: 380px;
   height: 600px;
   overflow: hidden;
-  background: var(--color-bg);
+  background: var(--bg-gradient);
   color: var(--color-txt);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -45,7 +46,7 @@ body {
     height: 100vh;
     display: grid;
     place-items: center;
-    background: radial-gradient(circle at 30% 20%, #12301f 0, transparent 40%), var(--color-bg);
+    background: #0b1011;
   }
   #root {
     width: 380px;
@@ -63,36 +64,9 @@ body {
 }
 
 
-/* Soft ambient blobs behind every screen. */
-.ambient::before,
-.ambient::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-  border-radius: 9999px;
-  filter: blur(60px);
-  opacity: 0.22;
-  z-index: 0;
-}
-.ambient::before {
-  width: 220px;
-  height: 220px;
-  top: -90px;
-  right: -70px;
-  background: var(--color-acc);
-  animation: drift 14s ease-in-out infinite alternate;
-}
-.ambient::after {
-  width: 180px;
-  height: 180px;
-  bottom: -80px;
-  left: -60px;
-  background: var(--color-pop);
-  animation: drift 18s ease-in-out infinite alternate-reverse;
-}
-.ambient > * {
-  position: relative;
-  z-index: 1;
+/* Screen background: the teal-to-ink gradient from the design. */
+.ambient {
+  background: var(--bg-gradient) !important;
 }
 
 ::-webkit-scrollbar {
@@ -103,7 +77,7 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(120, 140, 170, 0.25);
+  background: rgba(121, 138, 142, 0.3);
   border-radius: 9999px;
 }
 
@@ -201,13 +175,30 @@ textarea:focus-visible {
 .hover-wiggle:hover { animation: wiggle 0.4s ease; }
 
 .glow {
-  box-shadow: 0 6px 22px -6px rgba(34, 197, 94, 0.55);
+  box-shadow: 0 6px 22px -8px rgba(63, 209, 197, 0.45);
 }
+/* Solid accent fill (progress bars, toggles, logo). */
 .grad-acc {
-  background: linear-gradient(135deg, #22c55e 0%, #2dd4bf 100%);
+  background: linear-gradient(135deg, #3fd1c5 0%, #34b3d1 100%);
+}
+/* Primary buttons: the design's tinted cyan pill. */
+.btn-acc {
+  background: rgba(63, 209, 197, 0.12);
+  color: var(--color-acc);
+  border: 1px solid rgba(63, 209, 197, 0.18);
+  transition: background-color 0.15s ease, transform 0.12s ease;
+}
+.btn-acc:hover:not(:disabled) {
+  background: rgba(63, 209, 197, 0.2);
+}
+/* Translucent glass card. */
+.glass {
+  background: rgba(20, 29, 32, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
 }
 .grad-text {
-  background: linear-gradient(90deg, #4ade80, #2dd4bf 50%, #a78bfa);
+  background: linear-gradient(90deg, #3fd1c5, #9d7bfa);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;

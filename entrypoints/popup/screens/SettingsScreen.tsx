@@ -12,7 +12,7 @@ import SyncBadge from '../components/SyncBadge';
 function Card({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="anim-card rounded-2xl border border-line bg-surface p-3.5">
-      <h3 className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-mut">
+      <h3 className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-mut">
         {icon}
         {title}
       </h3>
@@ -107,7 +107,7 @@ export default function SettingsScreen() {
         <button onClick={() => app.setScreen('dashboard')} aria-label="Back" className="press rounded-lg p-1.5 text-mut hover:text-txt">
           <ChevronLeft size={18} />
         </button>
-        <h1 className="text-sm font-extrabold">Settings</h1>
+        <h1 className="text-sm font-semibold">Settings</h1>
         <span className="w-7" />
       </header>
 
@@ -135,7 +135,7 @@ export default function SettingsScreen() {
                   />
                 </form>
               ) : (
-                <p className="flex items-center gap-1 truncate text-sm font-extrabold">
+                <p className="flex items-center gap-1 truncate text-sm font-semibold">
                   {acc?.local ? 'On this device' : acc?.name}
                   {!acc?.local && (
                     <button aria-label="Edit name" onClick={() => setEditingName(true)} className="press rounded p-0.5 text-mut hover:text-txt">
@@ -152,7 +152,7 @@ export default function SettingsScreen() {
               <Users size={12} /> Switch
             </button>
             {acc?.local ? (
-              <button onClick={() => app.setScreen('signup')} className="press grad-acc flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-extrabold text-white">
+              <button onClick={() => app.setScreen('signup')} className="press btn-acc flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-xs font-semibold">
                 ✨ Sync my tasks
               </button>
             ) : (

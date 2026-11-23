@@ -32,7 +32,7 @@ export default function ConfirmDialog() {
           >
             {opts.danger ? <AlertTriangle size={22} /> : <HelpCircle size={22} />}
           </span>
-          <h3 id="confirm-title" className="mt-3 text-base font-extrabold text-txt">
+          <h3 id="confirm-title" className="mt-3 text-base font-semibold text-txt">
             {opts.title}
           </h3>
           {opts.message && <p className="mt-1.5 text-xs leading-relaxed text-mut">{opts.message}</p>}
@@ -40,15 +40,15 @@ export default function ConfirmDialog() {
         <div className="mt-5 flex gap-2">
           <button
             onClick={() => resolveConfirm(false)}
-            className="press flex-1 rounded-2xl border border-line bg-surface2 py-2.5 text-xs font-bold text-txt hover:bg-line"
+            className="press flex-1 rounded-full border border-line bg-surface2 py-2.5 text-xs font-bold text-txt hover:bg-line"
           >
             Never mind
           </button>
           <button
             ref={okRef}
             onClick={() => resolveConfirm(true)}
-            className={`press flex-1 rounded-2xl py-2.5 text-xs font-extrabold text-white ${
-              opts.danger ? 'bg-danger hover:bg-rose-600' : 'grad-acc glow'
+            className={`press flex-1 rounded-full py-2.5 text-xs font-semibold ${
+              opts.danger ? 'bg-danger text-white hover:bg-rose-600' : 'btn-acc'
             }`}
           >
             {opts.confirmText ?? 'Confirm'}

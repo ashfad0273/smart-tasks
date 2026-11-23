@@ -144,7 +144,7 @@ export default function EditTaskSheet() {
     <Sheet onClose={() => void requestClose()} label="Edit task">
       <div className="px-4 pb-5">
         <div className="flex items-center justify-between pb-2">
-          <h2 className="text-base font-extrabold">Edit task ✏️</h2>
+          <h2 className="text-base font-semibold">Edit task ✏️</h2>
           <button onClick={() => void requestClose()} aria-label="Close" className="press rounded-lg p-1 text-mut hover:text-txt">
             <X size={16} />
           </button>
@@ -231,7 +231,7 @@ export default function EditTaskSheet() {
                 onClick={() => setPriority(priority === p ? null : p)}
                 aria-pressed={priority === p}
                 className={cx(
-                  'press rounded-xl border py-2 text-xs font-extrabold transition-all',
+                  'press rounded-xl border py-2 text-xs font-semibold transition-all',
                   priority === p ? 'scale-[1.03] border-transparent text-white shadow-lg' : 'border-line bg-surface2 text-mut hover:text-txt',
                 )}
                 style={priority === p ? { background: PRIORITY_META[p].color } : undefined}
@@ -390,11 +390,11 @@ export default function EditTaskSheet() {
         <div className="mt-5 flex gap-2">
           <button
             onClick={() => void remove()}
-            className="press inline-flex shrink-0 items-center gap-1.5 rounded-2xl border border-danger/30 px-3.5 py-2.5 text-xs font-bold text-danger hover:bg-danger/10"
+            className="press inline-flex shrink-0 items-center gap-1.5 rounded-full border border-danger/30 px-3.5 py-2.5 text-xs font-bold text-danger hover:bg-danger/10"
           >
             <Trash2 size={13} /> Delete
           </button>
-          <button onClick={() => void save()} className="press grad-acc glow flex-1 rounded-2xl py-2.5 text-sm font-extrabold text-white">
+          <button onClick={() => void save()} className="press btn-acc flex-1 rounded-full py-2.5 text-sm font-semibold">
             {dirty ? 'Save changes' : 'Done'}
           </button>
         </div>

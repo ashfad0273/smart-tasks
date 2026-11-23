@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-const COLORS = ['#22c55e', '#2dd4bf', '#a78bfa', '#facc15', '#f472b6', '#60a5fa', '#fb923c'];
+const COLORS = ['#3fd1c5', '#9d7bfa', '#a78bfa', '#facc15', '#f472b6', '#60a5fa', '#fb923c'];
 
 /** Full-screen confetti rain. Re-fires whenever `fire` changes (and is > 0). */
 export default function Confetti({ fire }: { fire: number }) {

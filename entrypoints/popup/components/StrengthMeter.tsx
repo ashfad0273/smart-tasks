@@ -3,7 +3,7 @@ import { passwordScore, strengthLabel } from '../../../lib/utils';
 export default function StrengthMeter({ pw }: { pw: string }) {
   const s = passwordScore(pw);
   const score = [s.length, s.upper, s.number, s.symbol].filter(Boolean).length;
-  const colors = ['#ef4444', '#f97316', '#f59e0b', '#22c55e', '#22c55e'];
+  const colors = ['#ef4444', '#f97316', '#f59e0b', '#3fd1c5', '#3fd1c5'];
   const color = pw ? colors[score] : '#212b3a';
   const filled = pw ? Math.max(score, 1) : 0;
   return (

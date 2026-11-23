@@ -32,7 +32,7 @@ export default function Login() {
           <button
             onClick={() => void app.signInWithGoogle()}
             disabled={app.busy}
-            className="press mt-6 flex w-full items-center justify-center gap-2.5 rounded-2xl border border-line bg-surface2 py-2.5 text-sm font-bold text-txt hover:bg-line disabled:opacity-50"
+            className="press mt-6 flex w-full items-center justify-center gap-2.5 rounded-full border border-line bg-surface2 py-2.5 text-sm font-bold text-txt hover:bg-line disabled:opacity-50"
           >
             <GoogleIcon size={16} /> Continue with Google
           </button>
@@ -58,7 +58,7 @@ export default function Login() {
       <div className="mt-5 space-y-2 text-center">
         <p className="text-xs font-semibold text-mut">
           New here?{' '}
-          <button onClick={() => app.setScreen('signup')} className="font-extrabold text-acc underline-offset-2 hover:underline">
+          <button onClick={() => app.setScreen('signup')} className="font-semibold text-acc underline-offset-2 hover:underline">
             Create an account
           </button>
         </p>

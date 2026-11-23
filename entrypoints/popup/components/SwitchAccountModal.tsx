@@ -37,7 +37,7 @@ export default function SwitchAccountModal() {
       <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] animate-[fadeIn_.12s_ease-out]" onClick={() => app.setSwitcherOpen(false)} />
       <div className="anim-pop relative w-full rounded-3xl border border-line bg-surface p-4 shadow-2xl">
         <div className="flex items-center justify-between">
-          <h3 id="switch-title" className="text-base font-extrabold">
+          <h3 id="switch-title" className="text-base font-semibold">
             Your accounts
           </h3>
           <button onClick={() => app.setSwitcherOpen(false)} aria-label="Close" className="press rounded-lg p-1 text-mut hover:text-txt">
@@ -63,7 +63,7 @@ export default function SwitchAccountModal() {
                     <span className="flex items-center gap-1.5">
                       <span className="truncate text-sm font-bold">{a.local ? 'On this device' : a.name}</span>
                       {active && (
-                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-acc/15 px-1.5 py-0.5 text-[10px] font-extrabold text-acc">
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-acc/15 px-1.5 py-0.5 text-[10px] font-semibold text-acc">
                           <Check size={9} strokeWidth={3} /> Active
                         </span>
                       )}
@@ -86,7 +86,7 @@ export default function SwitchAccountModal() {
 
         <button
           onClick={app.startAddAccount}
-          className="press mt-3 flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-acc/50 bg-acc/5 py-2.5 text-sm font-extrabold text-acc hover:bg-acc/10"
+          className="press mt-3 flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-acc/50 bg-acc/5 py-2.5 text-sm font-semibold text-acc hover:bg-acc/10"
         >
           <Plus size={15} strokeWidth={3} /> Add another account
         </button>

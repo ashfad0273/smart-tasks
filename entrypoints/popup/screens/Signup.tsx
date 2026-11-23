@@ -43,7 +43,7 @@ export default function Signup() {
           <button
             onClick={() => void app.signInWithGoogle()}
             disabled={app.busy}
-            className="press mt-6 flex w-full items-center justify-center gap-2.5 rounded-2xl border border-line bg-surface2 py-2.5 text-sm font-bold text-txt hover:bg-line disabled:opacity-50"
+            className="press mt-6 flex w-full items-center justify-center gap-2.5 rounded-full border border-line bg-surface2 py-2.5 text-sm font-bold text-txt hover:bg-line disabled:opacity-50"
           >
             <GoogleIcon size={16} /> Sign up with Google
           </button>
@@ -79,7 +79,7 @@ export default function Signup() {
 
       <p className="mt-4 text-center text-xs font-semibold text-mut">
         Already have an account?{' '}
-        <button onClick={() => app.setScreen('login')} className="font-extrabold text-acc underline-offset-2 hover:underline">
+        <button onClick={() => app.setScreen('login')} className="font-semibold text-acc underline-offset-2 hover:underline">
           Sign in
         </button>
       </p>

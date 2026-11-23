@@ -33,7 +33,7 @@ export default function CategoriesScreen() {
         >
           <ChevronLeft size={18} />
         </button>
-        <h1 className="text-sm font-extrabold">Categories</h1>
+        <h1 className="text-sm font-semibold">Categories</h1>
         <span className="w-7" />
       </header>
 
@@ -57,7 +57,7 @@ export default function CategoriesScreen() {
                     app.setScreen('dashboard');
                   }}
                 >
-                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-xl text-xs font-extrabold text-white" style={{ background: c.color }}>{c.name.slice(0, 1).toUpperCase()}</span>
+                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-xl text-xs font-semibold text-white" style={{ background: c.color }}>{c.name.slice(0, 1).toUpperCase()}</span>
                   <span className="min-w-0 flex-1 truncate text-sm font-bold">{c.name}</span>
                   <span className="shrink-0 text-xs text-mut">
                     {n ? `${n} to do` : 'all clear ✓'}
@@ -106,7 +106,7 @@ export default function CategoriesScreen() {
       <div className="p-4">
         <button
           onClick={() => app.openCategoryModal({ mode: 'create' })}
-          className="press grad-acc glow w-full rounded-2xl py-3 text-sm font-extrabold text-white"
+          className="press btn-acc w-full rounded-full py-3 text-sm font-semibold"
         >
           + Add Category
         </button>

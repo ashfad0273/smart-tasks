@@ -2,7 +2,7 @@ import { CloudOff, HardDrive, RefreshCw } from 'lucide-react';
 import type { SyncState } from '../../../lib/types';
 
 const META: Record<SyncState, { label: string; color: string; pulse?: boolean }> = {
-  synced: { label: 'Synced', color: '#22c55e' },
+  synced: { label: 'Synced', color: '#3fd1c5' },
   syncing: { label: 'Syncing', color: '#f59e0b', pulse: true },
   offline: { label: 'Offline', color: '#94a3b8' },
   error: { label: 'Retry', color: '#f43f5e' },

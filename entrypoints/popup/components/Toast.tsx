@@ -32,7 +32,7 @@ export default function Toast() {
               action.run();
               dismissToast();
             }}
-            className="press ml-1 shrink-0 rounded-full bg-white/10 px-3 py-1 text-[11px] font-extrabold text-txt hover:bg-white/20"
+            className="press ml-1 shrink-0 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-txt hover:bg-white/20"
           >
             {action.label}
           </button>

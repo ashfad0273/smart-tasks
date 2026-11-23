@@ -1,4 +1,4 @@
-const COLORS = ['#22c55e', '#2dd4bf', '#a78bfa', '#facc15', '#f472b6', '#60a5fa'];
+const COLORS = ['#3fd1c5', '#9d7bfa', '#a78bfa', '#facc15', '#f472b6', '#60a5fa'];
 
 /** A tiny particle burst, rendered around its (relative) parent. */
 export default function Burst({ count = 10 }: { count?: number }) {

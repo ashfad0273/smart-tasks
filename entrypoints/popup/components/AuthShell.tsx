@@ -28,7 +28,7 @@ export default function AuthShell({
       )}
       <div className="mt-2 flex flex-col items-center text-center">
         <Logo size={52} bob />
-        <h1 className="mt-4 text-xl font-extrabold">
+        <h1 className="mt-4 text-xl font-semibold">
           {title} {emoji && <span aria-hidden="true">{emoji}</span>}
         </h1>
         {sub && <p className="mt-1 max-w-[280px] text-xs font-semibold leading-relaxed text-mut">{sub}</p>}
@@ -42,7 +42,7 @@ export function PrimaryButton({ busy, children, ...rest }: React.ButtonHTMLAttri
   return (
     <button
       {...rest}
-      className={`press grad-acc glow w-full rounded-2xl py-3 text-sm font-extrabold text-white disabled:opacity-40 disabled:shadow-none ${rest.className ?? ''}`}
+      className={`press btn-acc w-full rounded-full py-3 text-sm font-semibold disabled:opacity-40 disabled:shadow-none ${rest.className ?? ''}`}
     >
       {busy ? <span className="mx-auto block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : children}
     </button>

@@ -37,7 +37,7 @@ export default function CategoryModal() {
     <div className="fixed inset-0 z-[60] grid place-items-center p-5" role="dialog" aria-modal="true" aria-labelledby="cat-title">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] animate-[fadeIn_.12s_ease-out]" onClick={app.closeCategoryModal} />
       <div className="anim-pop relative w-full rounded-3xl border border-line bg-surface p-5 shadow-2xl">
-        <h3 id="cat-title" className="text-base font-extrabold">
+        <h3 id="cat-title" className="text-base font-semibold">
           {editing ? 'Edit category' : 'New category'} 🎨
         </h3>
 
@@ -91,10 +91,10 @@ export default function CategoryModal() {
         </div>
 
         <div className="mt-5 flex gap-2">
-          <button onClick={app.closeCategoryModal} className="press flex-1 rounded-2xl border border-line bg-surface2 py-2.5 text-xs font-bold text-txt hover:bg-line">
+          <button onClick={app.closeCategoryModal} className="press flex-1 rounded-full border border-line bg-surface2 py-2.5 text-xs font-bold text-txt hover:bg-line">
             Cancel
           </button>
-          <button onClick={() => void save()} className="press grad-acc glow flex-1 rounded-2xl py-2.5 text-xs font-extrabold text-white">
+          <button onClick={() => void save()} className="press btn-acc flex-1 rounded-full py-2.5 text-xs font-semibold">
             {editing ? 'Save' : 'Create'}
           </button>
         </div>

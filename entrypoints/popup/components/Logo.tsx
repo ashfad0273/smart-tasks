@@ -4,7 +4,7 @@ import { Check } from 'lucide-react';
 export default function Logo({ size = 56, bob = false }: { size?: number; bob?: boolean }) {
   return (
     <span
-      className={`grad-acc glow hover-wiggle grid place-items-center text-white ${bob ? 'anim-bob' : ''}`}
+      className={`btn-acc hover-wiggle grid place-items-center  ${bob ? 'anim-bob' : ''}`}
       style={{ width: size, height: size, borderRadius: size * 0.32 }}
       aria-hidden="true"
     >

@@ -44,30 +44,27 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
   return (
     <div
       className={cx(
-        'anim-card group relative flex items-start gap-2.5 overflow-hidden rounded-2xl border bg-surface px-3 py-2.5 transition-all duration-300',
-        'hover:-translate-y-0.5 hover:border-mut/30 hover:shadow-[0_8px_20px_-10px_rgba(0,0,0,.6)] focus-within:border-mut/30',
-        done ? 'border-line/60 opacity-60' : 'border-line',
+        'anim-card group relative flex items-start gap-3 overflow-hidden rounded-lg border border-white/[.03] bg-white/[.012] px-3.5 py-2.5 transition-colors duration-200',
+        'hover:bg-white/[.03] focus-within:bg-white/[.03]',
       )}
       style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
     >
       {prio && !done && (
-        <span className="absolute inset-y-2 left-0 w-1 rounded-r-full" style={{ background: prio.color }} aria-hidden="true" />
+        <span className="absolute inset-y-2.5 left-0 w-[3px] rounded-r-full" style={{ background: prio.color }} aria-hidden="true" />
       )}
 
       <button
         onClick={toggle}
         aria-label={done ? `Mark "${task.title}" as not done` : `Complete "${task.title}"`}
-        className="press relative mt-0.5 grid h-[22px] w-[22px] shrink-0 place-items-center"
+        className="press relative mt-[1px] grid h-[18px] w-[18px] shrink-0 place-items-center"
       >
         {done ? (
-          <span key="d" className="anim-check grad-acc grid h-[22px] w-[22px] place-items-center rounded-full text-white">
-            <Check size={13} strokeWidth={3.5} />
+          <span key="d" className="anim-check grid h-4 w-4 place-items-center rounded-[4px] border-[1.5px] border-acc bg-acc/10 text-acc">
+            <Check size={11} strokeWidth={3.5} />
           </span>
         ) : (
-          <span
-            className="grid h-[22px] w-[22px] place-items-center rounded-full border-2 border-mut/40 text-transparent transition-colors hover:border-acc hover:bg-acc/10 hover:text-acc"
-          >
-            <Check size={12} strokeWidth={3.5} />
+          <span className="grid h-4 w-4 place-items-center rounded-[4px] border-[1.5px] border-mut text-transparent transition-colors hover:border-acc hover:bg-acc/10 hover:text-acc">
+            <Check size={11} strokeWidth={3.5} />
           </span>
         )}
         {burst > 0 && <Burst key={burst} />}
@@ -90,7 +87,7 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
               }
             }}
             aria-label="Task title"
-            className="w-full rounded-lg border border-acc/50 bg-surface2 px-2 py-0.5 text-sm font-semibold outline-none"
+            className="w-full rounded-md border border-acc bg-black/30 px-2.5 py-1 text-[13.5px] outline-none"
           />
         ) : (
           <button
@@ -104,8 +101,8 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
           >
             <span
               className={cx(
-                'line-clamp-2 break-words text-sm font-semibold leading-snug transition-colors',
-                done ? 'text-mut line-through decoration-acc/60 decoration-2' : 'text-txt',
+                'line-clamp-2 break-words text-[13.5px] leading-snug transition-colors',
+                done ? 'text-mut line-through opacity-60' : 'text-txt',
               )}
             >
               {task.title}
@@ -114,7 +111,7 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
         )}
 
         {(cat || due || task.subtasks.length > 0 || task.url) && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10.5px] font-bold">
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10.5px] font-semibold">
             {cat && (
               <button
                 onClick={() => app.setFilter(cat.id)}
@@ -163,14 +160,14 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
         <button
           aria-label={`Edit "${task.title}"`}
           onClick={() => app.openEdit(task.id)}
-          className="press rounded-lg p-1.5 text-mut hover:bg-line hover:text-txt"
+          className="press rounded-md p-1.5 text-mut hover:text-acc"
         >
           <Pencil size={13} />
         </button>
         <button
           aria-label={`Delete "${task.title}"`}
           onClick={() => void app.deleteTask(task.id)}
-          className="press rounded-lg p-1.5 text-mut hover:bg-danger/15 hover:text-danger"
+          className="press rounded-md p-1.5 text-mut hover:text-[#ef4444]"
         >
           <Trash2 size={13} />
         </button>

@@ -41,7 +41,7 @@ export default function Avatar({
   const h = hue ?? hueFromString(email || name || 'user');
   return (
     <span
-      className="grid shrink-0 place-items-center rounded-full font-extrabold text-white"
+      className="grid shrink-0 place-items-center rounded-full font-semibold text-white"
       style={{
         width: size,
         height: size,
