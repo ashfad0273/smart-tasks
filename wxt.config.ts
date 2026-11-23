@@ -16,11 +16,11 @@ export default defineConfig({
     plugins: [tailwindcss()],
   }),
   manifest: {
-    name: 'Smart Tasks — Synced To-Do List',
+    name: 'Smart Tasks: To-Do List & Reminders',
     short_name: 'Smart Tasks',
     version: '1.0.0',
     description:
-      'A playful to-do list that syncs across your devices in real time. Reminders, categories, subtasks and right-click capture.',
+      'Capture tasks in a click, get reminders on time and stay in sync on every device. Works with AI agents like Claude.',
     minimum_chrome_version: '116',
     permissions: ['storage', 'identity', 'alarms', 'notifications', 'contextMenus'],
     action: { default_title: 'Smart Tasks' },

@@ -1,4 +1,4 @@
-# Smart Tasks — Synced To-Do List
+# Smart Tasks: To-Do List & Reminders
 
 A playful Chrome extension to-do list that syncs across devices in real time. Its backend is a Cloudflare Worker.
 
