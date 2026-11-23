@@ -91,7 +91,7 @@ export default function AgentScreen() {
   };
 
   const key = fresh ?? 'YOUR_KEY';
-  const command = `claude mcp add --transport http smart-tasks ${MCP_URL} --header "Authorization: Bearer ${key}"`;
+  const command = `claude mcp add --scope user --transport http smart-tasks ${MCP_URL} --header "Authorization: Bearer ${key}"`;
 
   return (
     <div className="ambient flex h-full flex-col bg-bg">
