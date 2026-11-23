@@ -2,6 +2,24 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## 1.5.1 - 2026-11-24
+
+### Fixed
+- **Continue with Google** in the Windows app now opens Google in your default browser and brings you back to the app when you're signed in. Before, it failed with "failed to create webview".
+
+## 1.5.0 - 2026-11-24
+
+### Added
+- **Smart Tasks for Windows.** A small desktop app (Rust and WebView2) with the same screens, a resizable window, a tray icon, a taskbar badge, Windows notifications with Mark done and Snooze, Ctrl + Alt + K from anywhere and start with Windows. It updates itself.
+- **More AI apps.** The AI agent screen has setup for Claude Code, Claude Desktop, Codex CLI, Gemini CLI, Cursor, VS Code, Windsurf, Cline and Zed.
+- **Welcome tour.** New accounts get a short hands-on tour: pick what you use it for, add your first tasks, tick one off, send a test reminder, try the shortcut and pick your AI. Replay it from Settings.
+- **Livelier welcome screen** with a task you can tick off before signing up.
+- **Loading screen** while Smart Tasks starts.
+
+### Changed
+- The Windows app fills its window and spreads out as you make it wider.
+- When the Windows app runs on the same computer, it shows your reminders and agent notifications and the extension stays quiet, so nothing pops up twice.
+
 ## 1.4.1 - 2026-11-23
 
 ### Changed

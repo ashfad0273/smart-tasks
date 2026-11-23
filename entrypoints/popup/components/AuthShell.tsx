@@ -16,7 +16,7 @@ export default function AuthShell({
   const app = useApp();
   const back = onBack ?? (app.account ? app.cancelAddAccount : undefined);
   return (
-    <div className="ambient h-full overflow-y-auto bg-bg px-6 pb-4 pt-4">
+    <div className="st-auth ambient h-full overflow-y-auto bg-bg px-6 pb-4 pt-4">
       {back ? (
         <button onClick={back} className="press -ml-1 inline-flex items-center gap-1 rounded-lg px-1 py-0.5 text-xs font-semibold text-mut hover:text-txt">
           <ArrowLeft size={13} /> Back

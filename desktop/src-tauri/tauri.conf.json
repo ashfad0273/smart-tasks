@@ -1,0 +1,62 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Smart Tasks",
+  "mainBinaryName": "smart-tasks",
+  "version": "../../package.json",
+  "identifier": "dev.smarttasks.desktop",
+  "build": {
+    "beforeDevCommand": "npx vite --config vite.config.ts",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npx vite build --config vite.config.ts",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://smart-tasks-api.ashfadhossain0.workers.dev wss://smart-tasks-api.ashfadhossain0.workers.dev https://smart-tasks.ashfadhossain0.workers.dev http://localhost:8787 ws://localhost:8787"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "createUpdaterArtifacts": true,
+    "publisher": "Ashfad Hossain",
+    "shortDescription": "To-do list and reminders that sync with the Smart Tasks extension",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "compression": "lzma"
+      }
+    },
+    "category": "Productivity",
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "dmg": {
+        "windowSize": {
+          "width": 560,
+          "height": 360
+        }
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU4Q0REMjM0QTJEN0U5ODkKUldTSjZkZWlOTkxONktac0dKbHRVZ2RzRzRoc1REbWM5UHJhVER4a2dmRVhHOExxdEV6Wm8rSkwK",
+      "endpoints": [
+        "https://smart-tasks.ashfadhossain0.workers.dev/desktop/latest.json"
+      ],
+      "windows": {
+        "installMode": "quiet"
+      }
+    }
+  }
+}

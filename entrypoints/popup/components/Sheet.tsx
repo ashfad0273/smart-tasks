@@ -17,7 +17,7 @@ export default function Sheet({ onClose, label, children }: { onClose: () => voi
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={label}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] animate-[fadeIn_.25s_ease-out]" onClick={onClose} />
       <div
-        className="absolute inset-x-0 bottom-0 flex max-h-[94%] flex-col rounded-t-3xl border-t border-line bg-surface shadow-[0_-20px_60px_rgba(0,0,0,.5)] animate-[sheetUp_.42s_var(--ease-out)]"
+        className="st-sheet absolute inset-x-0 bottom-0 flex max-h-[94%] flex-col rounded-t-3xl border-t border-line bg-surface shadow-[0_-20px_60px_rgba(0,0,0,.5)] animate-[sheetUp_.42s_var(--ease-out)]"
         style={dy ? { transform: `translateY(${dy}px)`, transition: 'none' } : { transition: 'transform .35s var(--ease-out)' }}
       >
         <div

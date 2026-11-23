@@ -27,3 +27,12 @@ worker/.wrangler/
 # download site build output
 site/public/
 .site-stage/
+
+# desktop preview build intermediates
+desktop/preview/.build/
+
+# Windows app build output (Cargo target lives in %LOCALAPPDATA%\smart-tasks-build when the path has spaces)
+desktop/dist/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+desktop/release/

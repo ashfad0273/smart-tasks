@@ -4,7 +4,7 @@
 // Run `npm run site` (builds the extension first) and `npm run site:deploy` to publish.
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,6 +12,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist/chrome-mv3');
 const out = join(root, 'site/public');
 const API = 'https://smart-tasks-api.ashfadhossain0.workers.dev';
+const SITE = 'https://smart-tasks.ashfadhossain0.workers.dev';
 
 const manifest = JSON.parse(readFileSync(join(dist, 'manifest.json'), 'utf8'));
 const version = manifest.version;
@@ -27,8 +28,15 @@ const zip = `smart-tasks-${version}.zip`;
 const stage = join(root, '.site-stage');
 rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage);
-execFileSync('cp', ['-R', dist, join(stage, 'smart-tasks')]);
-execFileSync('zip', ['-qr', '-X', join(out, zip), 'smart-tasks'], { cwd: stage });
+cpSync(dist, join(stage, 'smart-tasks'), { recursive: true });
+try {
+  execFileSync('zip', ['-qr', '-X', join(out, zip), 'smart-tasks'], { cwd: stage });
+} catch (e) {
+  // Windows has no zip command; its built-in bsdtar writes zips too.
+  if (e.code !== 'ENOENT' || process.platform !== 'win32') throw e;
+  const tar = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
+  execFileSync(tar, ['-a', '-c', '-f', join(out, zip), 'smart-tasks'], { cwd: stage });
+}
 rmSync(stage, { recursive: true, force: true });
 copyFileSync(join(out, zip), join(out, 'smart-tasks-latest.zip'));
 const kb = Math.round(statSync(join(out, zip)).size / 1024);
@@ -42,7 +50,7 @@ const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').repl
 const chev = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
 
 const releases = [];
-for (const line of readFileSync(join(root, 'CHANGELOG.md'), 'utf8').split('\n')) {
+for (const line of readFileSync(join(root, 'CHANGELOG.md'), 'utf8').split(/\r?\n/)) {
   const rel = /^## (\S+)\s*-\s*(.+)$/.exec(line);
   const grp = /^### (.+)$/.exec(line);
   const item = /^- (.+)$/.exec(line);
@@ -80,7 +88,81 @@ const logo = id => `<svg viewBox="16 16 480 480" xmlns="http://www.w3.org/2000/s
 <path d="M392 64 C396 92 404 100 432 104 C404 108 396 116 392 144 C388 116 380 108 352 104 C380 100 388 92 392 64 Z" fill="#fff"/>
 <circle cx="446" cy="160" r="11" fill="#fff" opacity=".85"/></svg>`;
 
+/* ── Desktop app (desktop/): Windows + macOS downloads and the updater's latest.json ── */
+// Built by `npm run desktop:build`; Cargo's target dir is moved off paths with
+// spaces by desktop/scripts/tauri.mjs, so look there too.
+const targetDirs = [
+  process.env.CARGO_TARGET_DIR,
+  process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, 'smart-tasks-build', 'target'),
+  join(root, 'desktop/src-tauri/target'),
+].filter(Boolean);
+const deskOut = join(out, 'desktop');
+const platforms = {};
+const ctas = [];
+const metas = [];
+const mbOf = p => (statSync(p).size / 1024 / 1024).toFixed(1);
+const signature = p => readFileSync(`${p}.sig`, 'utf8').trim();
+
+const setupName = `Smart Tasks_${version}_x64-setup.exe`;
+const setupSrc = targetDirs.map(d => join(d, 'release/bundle/nsis', setupName)).find(p => existsSync(p) && existsSync(`${p}.sig`));
+if (setupSrc) {
+  const exe = `smart-tasks-setup-${version}.exe`;
+  mkdirSync(deskOut, { recursive: true });
+  copyFileSync(setupSrc, join(deskOut, exe));
+  copyFileSync(setupSrc, join(deskOut, 'smart-tasks-setup-latest.exe'));
+  platforms['windows-x86_64'] = { signature: signature(setupSrc), url: `${SITE}/desktop/${exe}` };
+  ctas.push(`<a class="ghost" href="/desktop/${exe}" download>Windows app</a>`);
+  metas.push(`Windows app ${mbOf(setupSrc)} MB`);
+} else {
+  console.warn(`No signed Windows installer for ${version} (run \`npm run desktop:build\`).`);
+}
+
+// macOS: one universal build (Apple silicon + Intel) made on GitHub by
+// .github/workflows/desktop-macos.yml and fetched into desktop/release/macos
+// with `npm run desktop:mac:fetch`. The .dmg is the download; the
+// .app.tar.gz (+ .sig) is what the updater installs.
+const macDir = join(root, 'desktop/release/macos');
+const macFiles = existsSync(macDir) ? readdirSync(macDir) : [];
+const dmgName = macFiles.find(n => n.endsWith(`_${version}_universal.dmg`));
+const tarName = macFiles.find(n => n.endsWith('.app.tar.gz') && macFiles.includes(`${n}.sig`));
+if (dmgName && tarName) {
+  const dmg = `smart-tasks-${version}-mac.dmg`;
+  const tar = `smart-tasks-${version}-mac.app.tar.gz`;
+  mkdirSync(deskOut, { recursive: true });
+  copyFileSync(join(macDir, dmgName), join(deskOut, dmg));
+  copyFileSync(join(macDir, dmgName), join(deskOut, 'smart-tasks-mac-latest.dmg'));
+  copyFileSync(join(macDir, tarName), join(deskOut, tar));
+  const mac = { signature: signature(join(macDir, tarName)), url: `${SITE}/desktop/${tar}` };
+  platforms['darwin-aarch64'] = mac;
+  platforms['darwin-x86_64'] = mac;
+  ctas.push(`<a class="ghost" href="/desktop/${dmg}" download>Mac app</a>`);
+  metas.push(`Mac app ${mbOf(join(macDir, dmgName))} MB`);
+} else {
+  console.warn(`No macOS ${version} build in desktop/release/macos (run \`npm run desktop:mac:fetch\` after the GitHub build).`);
+}
+
+// The updater's manifest lists whichever platforms are present.
+if (Object.keys(platforms).length) {
+  writeFileSync(
+    join(deskOut, 'latest.json'),
+    JSON.stringify(
+      {
+        version,
+        notes: releases[0].groups.flatMap(g => g.items.map(i => `- ${i.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`(.+?)`/g, '$1')}`)).join('\n'),
+        pub_date: new Date(`${releases[0].date}T12:00:00Z`).toISOString(),
+        platforms,
+      },
+      null,
+      2,
+    ),
+  );
+}
+const desktopCta = ctas.join('\n');
+const desktopMeta = metas.map(m => ` · ${m}`).join('');
+
 const html = readFileSync(join(root, 'site/template.html'), 'utf8')
+  .replaceAll('{{DESKTOP_CTA}}', desktopCta)
+  .replaceAll('{{DESKTOP_META}}', desktopMeta)
   .replaceAll('{{VERSION}}', esc(version))
   .replaceAll('{{SIZE}}', size)
   .replaceAll('{{ZIP}}', zip)
@@ -122,6 +204,17 @@ writeFileSync(
     '/version.json',
     '  Cache-Control: no-cache',
     '  Access-Control-Allow-Origin: *',
+    '/desktop/latest.json',
+    '  Cache-Control: no-cache',
+    '/desktop/*.exe',
+    '  Content-Type: application/vnd.microsoft.portable-executable',
+    '  Cache-Control: public, max-age=300',
+    '/desktop/*.dmg',
+    '  Content-Type: application/x-apple-diskimage',
+    '  Cache-Control: public, max-age=300',
+    '/desktop/*.tar.gz',
+    '  Content-Type: application/gzip',
+    '  Cache-Control: public, max-age=300',
     '/',
     '  Cache-Control: no-cache',
     '/index.html',

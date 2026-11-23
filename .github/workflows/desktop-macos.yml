@@ -1,0 +1,98 @@
+# Builds the macOS app (one universal binary: Apple silicon + Intel) on a Mac
+# runner. Download the result with `npm run desktop:mac:fetch`, then
+# `npm run site:deploy` publishes it next to the Windows installer.
+#
+# Repository secrets (Settings → Secrets and variables → Actions):
+#   TAURI_SIGNING_PRIVATE_KEY           required: contents of ~/.smart-tasks/updater.key
+#                                       (signs the update so installed apps accept it)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  only if that key has a password
+# Optional, for a signed + notarized app that opens without a Gatekeeper warning
+# (needs an Apple Developer account):
+#   APPLE_CERTIFICATE           base64 of the "Developer ID Application" .p12
+#   APPLE_CERTIFICATE_PASSWORD  the .p12 password
+#   APPLE_SIGNING_IDENTITY      e.g. "Developer ID Application: Your Name (TEAMID)"
+#   APPLE_ID, APPLE_PASSWORD (app-specific password), APPLE_TEAM_ID   for notarization
+# Without the Apple secrets the app is ad-hoc signed: it runs, but the first
+# open needs right-click → Open (or System Settings → Privacy & Security → Open Anyway).
+
+name: Desktop app (macOS)
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+
+      - run: npm ci
+
+      # Only secrets that are set reach the build: an empty APPLE_CERTIFICATE
+      # would make Tauri try (and fail) to import a certificate.
+      - name: Signing environment
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::Add the TAURI_SIGNING_PRIVATE_KEY secret (contents of ~/.smart-tasks/updater.key)."
+            exit 1
+          fi
+          for v in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD \
+                   APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -n "${!v}" ]; then
+              d="EOF_$(openssl rand -hex 8)"
+              { echo "$v<<$d"; echo "${!v}"; echo "$d"; } >> "$GITHUB_ENV"
+            fi
+          done
+          # No Developer ID: sign ad-hoc so Apple silicon will run it at all.
+          [ -n "$APPLE_SIGNING_IDENTITY" ] || echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+          [ -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ] || echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: npm run desktop:build -- --target universal-apple-darwin --bundles app,dmg
+
+      - name: Collect
+        run: |
+          B=desktop/src-tauri/target/universal-apple-darwin/release/bundle
+          mkdir -p out
+          cp "$B"/dmg/*.dmg out/
+          cp "$B"/macos/*.app.tar.gz "$B"/macos/*.app.tar.gz.sig out/
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smart-tasks-macos
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30

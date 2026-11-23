@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Smart Tasks Desktop Preview</title>
+<style>
+  :root {
+    --wall: radial-gradient(1200px 700px at 20% 10%, #1f4c55 0%, transparent 60%),
+            radial-gradient(900px 600px at 90% 90%, #3a2c63 0%, transparent 55%),
+            linear-gradient(160deg, #0d1b1f 0%, #101418 100%);
+    --glass: rgba(32, 36, 40, 0.82);
+    --glass-line: rgba(255, 255, 255, 0.08);
+    --txt: #e8eef0;
+    --muted: #9aa8ad;
+    --accent: #2dd4bf;
+    --danger: #ef4444;
+    --panel: rgba(18, 24, 27, 0.9);
+    --font: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--wall);
+    background-color: #0d1215;
+    color: var(--txt);
+    font: 14px/1.45 var(--font);
+    overflow: hidden;
+  }
+
+  /* ── desktop area ─────────────────────────────── */
+  .desktop {
+    position: absolute; inset: 0 0 48px 0;
+    display: flex; align-items: center; justify-content: center; gap: 40px;
+    padding: 24px;
+  }
+
+  /* ── app window ───────────────────────────────── */
+  .win {
+    width: 402px; flex: none;
+    border-radius: 8px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.12);
+    box-shadow: 0 32px 80px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
+    background: #10191c;
+    transition: opacity .18s ease, transform .22s cubic-bezier(.3,.7,.4,1);
+    transform-origin: 85% 110%;
+  }
+  .win.hidden { opacity: 0; transform: scale(.92) translateY(30px); pointer-events: none; }
+  .titlebar {
+    height: 32px; display: flex; align-items: center;
+    background: #0c1416; user-select: none;
+  }
+  .titlebar img { width: 16px; height: 16px; margin: 0 8px 0 12px; }
+  .titlebar .name { font-size: 12px; color: #cfd8db; flex: 1; }
+  .tb-btn {
+    width: 46px; height: 32px; border: 0; background: transparent; color: #cfd8db;
+    display: grid; place-items: center; cursor: default;
+  }
+  .tb-btn:hover { background: rgba(255,255,255,.08); }
+  .tb-btn.close:hover { background: #c42b1c; color: #fff; }
+  .tb-btn svg { width: 10px; height: 10px; }
+  .win iframe { display: block; width: 400px; height: 600px; border: 0; }
+
+  /* ── review panel ─────────────────────────────── */
+  .panel {
+    width: 360px; flex: none; max-height: 100%; overflow: auto;
+    background: var(--panel); border: 1px solid var(--glass-line); border-radius: 12px;
+    padding: 20px; backdrop-filter: blur(20px);
+  }
+  .panel h1 { font-size: 17px; margin: 0 0 4px; font-weight: 600; }
+  .panel .sub { color: var(--muted); margin: 0 0 16px; font-size: 13px; }
+  .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; font-weight: 600; }
+  .panel ul { margin: 0; padding-left: 18px; }
+  .panel li { margin: 4px 0; font-size: 13px; }
+  .panel li b { color: #fff; font-weight: 600; }
+  .panel kbd { font: 12px var(--font); background: rgba(255,255,255,.08); border: 1px solid var(--glass-line); border-radius: 4px; padding: 0 5px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn {
+    border: 1px solid var(--glass-line); background: rgba(255,255,255,.06); color: var(--txt);
+    font: 13px var(--font); padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  }
+  .btn:hover { background: rgba(255,255,255,.12); }
+  .btn.primary { background: var(--accent); border-color: transparent; color: #062b27; font-weight: 600; }
+  .stepper { display: inline-flex; align-items: center; gap: 8px; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* ── taskbar ──────────────────────────────────── */
+  .taskbar {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 48px;
+    background: var(--glass); backdrop-filter: blur(30px);
+    border-top: 1px solid var(--glass-line);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tb-apps { display: flex; gap: 4px; }
+  .tb-app {
+    width: 40px; height: 40px; border-radius: 4px; display: grid; place-items: center; position: relative;
+    cursor: default;
+  }
+  .tb-app:hover { background: rgba(255,255,255,.07); }
+  .tb-app img, .tb-app .ph { width: 24px; height: 24px; }
+  .tb-app .ph { border-radius: 5px; opacity: .85; }
+  .tb-app.running::after {
+    content: ''; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+    width: 6px; height: 3px; border-radius: 2px; background: #9aa8ad;
+  }
+  .tb-app.running.active::after { width: 16px; background: var(--accent); }
+  .badge {
+    position: absolute; right: 3px; bottom: 5px; min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 8px; color: #fff; font: 600 10px/16px var(--font); text-align: center;
+    border: 1.5px solid #202428;
+  }
+  .badge[hidden] { display: none; }
+  .tray {
+    position: absolute; right: 8px; top: 0; bottom: 0; display: flex; align-items: center; gap: 2px;
+  }
+  .tray-item {
+    height: 40px; min-width: 32px; padding: 0 6px; border-radius: 4px; display: grid; place-items: center;
+    color: var(--txt); font-size: 12px; cursor: default; position: relative;
+  }
+  .tray-item:hover { background: rgba(255,255,255,.07); }
+  .tray-item img { width: 16px; height: 16px; }
+  .tray-item svg { width: 16px; height: 16px; }
+  .clock { text-align: right; line-height: 1.25; padding: 0 8px; }
+  .tray-dot {
+    position: absolute; right: 4px; top: 9px; width: 7px; height: 7px; border-radius: 50%; border: 1px solid #202428;
+  }
+  .pulse { animation: pulse .9s ease 2; }
+  @keyframes pulse { 50% { background: rgba(45,212,191,.25); } }
+  .tooltip {
+    position: absolute; bottom: 52px; right: 0; white-space: nowrap;
+    background: #2b2f33; border: 1px solid var(--glass-line); border-radius: 4px;
+    padding: 4px 8px; font-size: 12px; pointer-events: none; opacity: 0; transition: opacity .12s;
+  }
+  .tray-item:hover .tooltip { opacity: 1; transition-delay: .4s; }
+
+  /* ── tray menu ───────────────────────────────── */
+  .menu {
+    position: absolute; bottom: 54px; right: 120px; width: 240px; padding: 4px;
+    background: #2b2f33; border: 1px solid var(--glass-line); border-radius: 8px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.5); font-size: 13px;
+  }
+  .menu[hidden] { display: none; }
+  .menu button {
+    width: 100%; display: flex; align-items: center; gap: 10px; text-align: left;
+    background: transparent; border: 0; color: var(--txt); font: 13px var(--font);
+    padding: 7px 10px; border-radius: 4px; cursor: default;
+  }
+  .menu button:hover { background: rgba(255,255,255,.08); }
+  .menu .check { width: 14px; color: var(--accent); }
+  .menu .hint { margin-left: auto; color: var(--muted); font-size: 12px; }
+  .menu hr { border: 0; border-top: 1px solid var(--glass-line); margin: 4px 0; }
+
+  /* ── toast ────────────────────────────────────── */
+  .toasts { position: absolute; right: 12px; bottom: 60px; display: flex; flex-direction: column; gap: 8px; width: 364px; }
+  .toast {
+    background: #2b2f33; border: 1px solid var(--glass-line); border-radius: 8px;
+    box-shadow: 0 16px 40px rgba(0,0,0,.5); padding: 12px 14px 14px;
+    animation: slide .28s cubic-bezier(.3,.7,.4,1);
+  }
+  .toast.out { animation: slideout .2s ease forwards; }
+  @keyframes slide { from { transform: translateX(110%); } }
+  @keyframes slideout { to { transform: translateX(110%); opacity: 0; } }
+  .toast .head { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .toast .head img { width: 16px; height: 16px; }
+  .toast .head .x { margin-left: auto; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; }
+  .toast .body { display: flex; gap: 12px; }
+  .toast .body img { width: 40px; height: 40px; flex: none; }
+  .toast .title { font-weight: 600; color: #fff; }
+  .toast .msg { color: #d2dadd; font-size: 13px; }
+  .toast .ctx { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .toast .actions { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; margin-top: 12px; }
+  .toast .actions button {
+    background: rgba(255,255,255,.08); border: 1px solid var(--glass-line); color: var(--txt);
+    font: 13px var(--font); padding: 6px; border-radius: 4px; cursor: pointer;
+  }
+  .toast .actions button:hover { background: rgba(255,255,255,.14); }
+
+  /* ── narrow screens: stack, drop the fake taskbar chrome extras ── */
+  @media (max-width: 860px) {
+    body { overflow: auto; }
+    .desktop { position: static; flex-direction: column; padding: 16px 16px 72px; }
+    .panel { width: 100%; max-width: 402px; }
+    .win { transform-origin: 50% 100%; }
+    .tb-apps .ph { display: none; }
+    .toasts { left: 16px; right: 16px; width: auto; }
+    .menu { right: 16px; }
+  }
+  @media (max-width: 440px) {
+    .win { width: 100%; }
+    .win iframe { width: 100%; }
+    .clock { display: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="desktop">
+    <section class="win" id="win" aria-label="Smart Tasks window">
+      <div class="titlebar">
+        <img src="__ICON__" alt="" />
+        <span class="name">Smart Tasks</span>
+        <button class="tb-btn" id="minBtn" title="Minimize" aria-label="Minimize">
+          <svg viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor" stroke-width="1"/></svg>
+        </button>
+        <button class="tb-btn close" id="closeBtn" title="Close (keeps running in the tray)" aria-label="Close">
+          <svg viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" stroke-width="1"/></svg>
+        </button>
+      </div>
+      <iframe src="app.html" title="Smart Tasks app"></iframe>
+    </section>
+
+    <aside class="panel">
+      <h1>Smart Tasks for Windows: preview</h1>
+      <p class="sub">The window shows the real app UI, running in local mode so you can add tasks. Everything around it (taskbar, tray, toasts) is a mock of what the Rust app adds.</p>
+
+      <h2>Try it</h2>
+      <div class="btns">
+        <button class="btn primary" id="demoReminder">Reminder toast</button>
+        <button class="btn" id="demoAgent">AI agent notification</button>
+        <button class="btn" id="demoHide">Close to tray</button>
+      </div>
+      <div style="margin-top:10px" class="stepper">
+        <span>Badge</span>
+        <button class="btn" id="badgeDown" aria-label="Fewer due tasks">−</button>
+        <b id="badgeVal">3</b>
+        <button class="btn" id="badgeUp" aria-label="More due tasks">+</button>
+        <button class="btn" id="badgeKind">Overdue (red)</button>
+      </div>
+      <p class="note">Right-click the tray icon (bottom right) for its menu. Left-click toggles the window.</p>
+
+      <h2>How the desktop app behaves</h2>
+      <ul>
+        <li><b>Window:</b> fixed 400×600, the same screens as the extension popup.</li>
+        <li><b>Close (×)</b> hides it to the tray so sync and reminders keep running. Quit from the tray menu.</li>
+        <li><b>Global shortcut</b> <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>K</kbd> opens it from anywhere. The extension's Ctrl+Shift+K stays free for Chrome.</li>
+        <li><b>Taskbar badge:</b> due-today/overdue count (green/red), or unread agent notifications (purple). Same rules as the toolbar badge.</li>
+        <li><b>Reminders:</b> Windows toasts with <i>Mark done</i> and <i>Snooze 10 min</i>.</li>
+        <li><b>Start with Windows</b> (on by default, toggle in the tray) launches straight to the tray.</li>
+        <li><b>Sync:</b> same account, API and live WebSocket updates as the extension, so tasks match across Chrome and desktop.</li>
+      </ul>
+
+      <h2>Not carried over</h2>
+      <ul>
+        <li>Right-click "Add task" on web pages (browser only).</li>
+        <li>Self-update of unpacked extension folders. The desktop app will get its own updater later.</li>
+        <li>Google sign-in opens Google in a small app window instead of Chrome's popup. It needs testing in the real build.</li>
+      </ul>
+
+      <h2>Build target</h2>
+      <ul>
+        <li>Tauri 2 (Rust) on the WebView2 runtime that ships with Windows 11.</li>
+        <li>Release profile tuned for size: LTO, opt-level "s", strip, abort on panic.</li>
+        <li>Aim: a ~4–6 MB exe and ~2–3 MB installer, compared with ~150 MB for Electron.</li>
+      </ul>
+    </aside>
+  </main>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <div class="menu" id="menu" role="menu" hidden>
+    <button role="menuitem" data-act="open"><span class="check"></span>Open Smart Tasks<span class="hint">Ctrl+Alt+K</span></button>
+    <button role="menuitem" data-act="sync"><span class="check"></span>Sync now</button>
+    <hr />
+    <button role="menuitemcheckbox" aria-checked="true" data-act="startup"><span class="check" id="startupCheck">✓</span>Start with Windows</button>
+    <button role="menuitemcheckbox" aria-checked="true" data-act="reminders"><span class="check" id="remCheck">✓</span>Reminders</button>
+    <hr />
+    <button role="menuitem" data-act="quit"><span class="check"></span>Quit Smart Tasks</button>
+  </div>
+
+  <footer class="taskbar">
+    <div class="tb-apps">
+      <div class="tb-app"><div class="ph" style="background:linear-gradient(135deg,#3b82f6,#06b6d4)"></div></div>
+      <div class="tb-app"><div class="ph" style="background:linear-gradient(135deg,#f59e0b,#ef4444)"></div></div>
+      <div class="tb-app running active" id="tbApp" title="Smart Tasks">
+        <img src="__ICON__" alt="Smart Tasks" />
+        <span class="badge" id="tbBadge">3</span>
+      </div>
+      <div class="tb-app"><div class="ph" style="background:linear-gradient(135deg,#22c55e,#14b8a6)"></div></div>
+    </div>
+    <div class="tray">
+      <div class="tray-item" title="Show hidden icons">
+        <svg viewBox="0 0 16 16"><path d="M4 10l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+      </div>
+      <div class="tray-item" id="trayIcon" role="button" tabindex="0" aria-label="Smart Tasks tray icon">
+        <img src="__ICON__" alt="" />
+        <span class="tray-dot" id="trayDot"></span>
+        <span class="tooltip" id="trayTip">Smart Tasks: 3 due today</span>
+      </div>
+      <div class="tray-item">
+        <svg viewBox="0 0 16 16"><path d="M1.5 6a9.5 9.5 0 0113 0M3.8 8.4a6.2 6.2 0 018.4 0M6 10.8a3 3 0 014 0" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="13" r="1" fill="currentColor"/></svg>
+      </div>
+      <div class="tray-item">
+        <svg viewBox="0 0 16 16"><path d="M2 6h3l4-3v10l-4-3H2z" fill="currentColor"/><path d="M11 5.5a3.5 3.5 0 010 5M12.8 3.8a6 6 0 010 8.4" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+      </div>
+      <div class="tray-item clock" id="clock"></div>
+    </div>
+  </footer>
+
+<script>
+  const ICON = '__ICON__';
+  const $ = id => document.getElementById(id);
+  const win = $('win'), menu = $('menu'), tbApp = $('tbApp');
+
+  /* window show/hide (close = hide to tray) */
+  function setVisible(v) {
+    win.classList.toggle('hidden', !v);
+    tbApp.classList.toggle('active', v);
+    tbApp.classList.toggle('running', v);
+    if (!v) { $('trayIcon').classList.remove('pulse'); void $('trayIcon').offsetWidth; $('trayIcon').classList.add('pulse'); }
+  }
+  $('closeBtn').onclick = () => setVisible(false);
+  $('minBtn').onclick = () => setVisible(false);
+  $('demoHide').onclick = () => setVisible(false);
+  tbApp.onclick = () => setVisible(win.classList.contains('hidden'));
+  $('trayIcon').onclick = () => { menu.hidden = true; setVisible(win.classList.contains('hidden')); };
+  $('trayIcon').oncontextmenu = e => { e.preventDefault(); menu.hidden = !menu.hidden; };
+  document.addEventListener('click', e => { if (!menu.contains(e.target) && e.target.closest('#trayIcon') == null) menu.hidden = true; });
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'k') { e.preventDefault(); setVisible(true); }
+    if (e.key === 'Escape') menu.hidden = true;
+  });
+
+  menu.onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const act = b.dataset.act;
+    if (act === 'open') setVisible(true);
+    if (act === 'sync') toast({ title: 'Synced', msg: 'Everything is up to date.', quiet: true });
+    if (act === 'startup' || act === 'reminders') {
+      const on = b.getAttribute('aria-checked') !== 'true';
+      b.setAttribute('aria-checked', on); b.querySelector('.check').textContent = on ? '✓' : '';
+      return;
+    }
+    if (act === 'quit') {
+      setVisible(false);
+      tbApp.style.display = 'none'; $('trayIcon').style.display = 'none';
+      toast({ title: 'Smart Tasks quit (preview)', msg: 'Reload the page to bring it back.', quiet: true });
+    }
+    menu.hidden = true;
+  };
+
+  /* badge */
+  let count = 3, kind = 0;
+  const kinds = [
+    { label: 'Overdue (red)', color: '#ef4444', tip: n => `Smart Tasks: ${n} due today` },
+    { label: 'Due today (green)', color: '#22c55e', tip: n => `Smart Tasks: ${n} due today` },
+    { label: 'Agent unread (purple)', color: '#9d7bfa', tip: n => `Smart Tasks: ${n} unread notification${n === 1 ? '' : 's'}` },
+  ];
+  function renderBadge() {
+    const k = kinds[kind];
+    $('badgeVal').textContent = count;
+    $('badgeKind').textContent = k.label;
+    $('tbBadge').hidden = count === 0;
+    $('tbBadge').textContent = Math.min(count, 99);
+    $('tbBadge').style.background = k.color;
+    $('trayDot').style.display = count ? '' : 'none';
+    $('trayDot').style.background = k.color;
+    $('trayTip').textContent = count ? k.tip(count) : 'Smart Tasks';
+  }
+  $('badgeUp').onclick = () => { count = Math.min(count + 1, 120); renderBadge(); };
+  $('badgeDown').onclick = () => { count = Math.max(count - 1, 0); renderBadge(); };
+  $('badgeKind').onclick = () => { kind = (kind + 1) % kinds.length; renderBadge(); };
+  renderBadge();
+
+  /* toasts */
+  function toast({ title, msg, ctx, actions = [], quiet }) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.innerHTML = `
+      <div class="head"><img src="${ICON}" alt=""><span>Smart Tasks</span><button class="x" aria-label="Dismiss">✕</button></div>
+      <div class="body"><img src="${ICON}" alt="">
+        <div><div class="title"></div><div class="msg"></div>${ctx ? '<div class="ctx"></div>' : ''}</div></div>
+      ${actions.length ? '<div class="actions"></div>' : ''}`;
+    el.querySelector('.title').textContent = title;
+    el.querySelector('.msg').textContent = msg;
+    if (ctx) el.querySelector('.ctx').textContent = ctx;
+    const close = () => { el.classList.add('out'); setTimeout(() => el.remove(), 200); };
+    el.querySelector('.x').onclick = close;
+    for (const [label, fn] of actions) {
+      const b = document.createElement('button'); b.textContent = label;
+      b.onclick = () => { close(); fn && fn(); };
+      el.querySelector('.actions').append(b);
+    }
+    el.querySelector('.body').onclick = () => { close(); setVisible(true); };
+    $('toasts').prepend(el);
+    if (quiet) setTimeout(close, 3500);
+  }
+  $('demoReminder').onclick = () => toast({
+    title: 'Task due', msg: 'Pay rent',
+    actions: [
+      ['Mark done', () => { count = Math.max(count - 1, 0); renderBadge(); toast({ title: 'Done', msg: '“Pay rent” marked done.', quiet: true }); }],
+      ['Snooze 10 min', () => toast({ title: 'Snoozed', msg: 'Reminding you again in 10 minutes.', quiet: true })],
+    ],
+  });
+  $('demoAgent').onclick = () => {
+    kind = 2; count = Math.max(count, 1); renderBadge();
+    toast({ title: 'Report is ready', msg: 'Your weekly summary finished. Click to open.', ctx: 'From your AI agent' });
+  };
+
+  /* taskbar clock */
+  function tick() {
+    const d = new Date();
+    const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const day = d.toLocaleDateString([], { day: 'numeric', month: 'numeric', year: 'numeric' });
+    $('clock').innerHTML = `${t}<br>${day}`;
+  }
+  tick(); setInterval(tick, 15000);
+</script>
+</body>
+</html>

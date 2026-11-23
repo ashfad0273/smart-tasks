@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BellRing, Bot, Check, ChevronLeft, Copy, KeyRound, Volume2 } from 'lucide-react';
 import { storageGet, storageSet } from '../../../lib/ext';
-import { AGENT_NOTIFY_KEY, AGENT_SOUND_KEY } from '../../../lib/keys';
+import { AGENT_CLIENT_KEY, AGENT_NOTIFY_KEY, AGENT_SOUND_KEY } from '../../../lib/keys';
+import { AGENT_CLIENTS } from '../../../lib/agents';
+import { cx } from '../../../lib/utils';
+import ScrollRow from '../components/ScrollRow';
 import { Toggle } from './SettingsScreen';
 import { api, API_URL, ApiError } from '../../../lib/api';
 import { useApp } from '../state/AppContext';
@@ -15,7 +18,7 @@ function when(ms: number | null): string {
   return new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-/** Lets an AI agent (Claude Code, Cursor, ...) manage tasks over MCP with a personal key. */
+/** Lets an AI agent (Claude, Codex, Gemini, Cursor, ...) manage tasks over MCP with a personal key. */
 export default function AgentScreen() {
   const app = useApp();
   const acc = app.account;
@@ -26,8 +29,12 @@ export default function AgentScreen() {
   const [copied, setCopied] = useState<string | null>(null);
   const [notifyOn, setNotifyOn] = useState<boolean | null>(null);
   const [soundOn, setSoundOn] = useState<boolean | null>(null);
+  const [clientId, setClientId] = useState(AGENT_CLIENTS[0].id);
 
   useEffect(() => {
+    void storageGet<string>(AGENT_CLIENT_KEY, AGENT_CLIENTS[0].id).then(id => {
+      if (AGENT_CLIENTS.some(c => c.id === id)) setClientId(id);
+    });
     void storageGet<boolean>(AGENT_NOTIFY_KEY, true).then(setNotifyOn);
     void storageGet<boolean>(AGENT_SOUND_KEY, true).then(setSoundOn);
   }, []);
@@ -101,7 +108,12 @@ export default function AgentScreen() {
   };
 
   const key = fresh ?? 'YOUR_KEY';
-  const command = `claude mcp add --scope user --transport http smart-tasks ${MCP_URL} --header "Authorization: Bearer ${key}"`;
+  const client = AGENT_CLIENTS.find(c => c.id === clientId) ?? AGENT_CLIENTS[0];
+  const setup = client.snippet(MCP_URL, key);
+  const pickClient = (id: string) => {
+    setClientId(id);
+    void storageSet(AGENT_CLIENT_KEY, id);
+  };
 
   return (
     <div className="ambient flex h-full flex-col bg-bg">
@@ -214,20 +226,34 @@ export default function AgentScreen() {
               </div>
             </section>
 
-            <section className="anim-card rounded-2xl border border-line bg-surface p-3.5">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-mut">Claude Code</h3>
-              <p className="mt-1.5 text-[11.5px] text-mut">Run this once in a terminal:</p>
-              <Snippet text={command} done={copied === 'cmd'} onCopy={() => void copy('cmd', command)} />
-
-              <h3 className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-mut">Other MCP apps</h3>
-              <p className="mt-1.5 text-[11.5px] text-mut">Server URL (HTTP):</p>
-              <Snippet text={MCP_URL} done={copied === 'url'} onCopy={() => void copy('url', MCP_URL)} />
-              <p className="mt-2 text-[11.5px] text-mut">Header:</p>
-              <Snippet
-                text={`Authorization: Bearer ${key}`}
-                done={copied === 'hdr'}
-                onCopy={() => void copy('hdr', `Authorization: Bearer ${key}`)}
-              />
+            <section className="anim-card rounded-2xl border border-line bg-surface py-3.5">
+              <h3 className="px-3.5 text-[11px] font-semibold uppercase tracking-wider text-mut">Connect your AI</h3>
+              <ScrollRow className="mt-2 gap-1.5 px-3.5 py-0.5">
+                {AGENT_CLIENTS.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => pickClient(c.id)}
+                    aria-pressed={c.id === client.id}
+                    className={cx(
+                      'press shrink-0 rounded-full border px-3 py-1 text-[11.5px] font-semibold',
+                      c.id === client.id ? 'border-acc/40 bg-acc/15 text-acc' : 'border-white/[.05] bg-black/15 text-mut hover:text-txt',
+                    )}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </ScrollRow>
+              <div key={client.id} className="anim-pop px-3.5">
+                <p className="mt-3 text-[11.5px] text-mut">{client.where}</p>
+                <Snippet
+                  text={setup}
+                  pre={setup.includes('\n')}
+                  done={copied === 'setup'}
+                  onCopy={() => void copy('setup', setup)}
+                />
+                {client.after && <p className="mt-1.5 text-[11px] text-mut">{client.after}</p>}
+                {!fresh && <p className="mt-1.5 text-[11px] text-mut">Make a new key above, then copy this: YOUR_KEY is filled in for you.</p>}
+              </div>
             </section>
           </>
         )}
@@ -275,10 +301,17 @@ function CopyBtn({ done, onClick, label }: { done: boolean; onClick: () => void;
   );
 }
 
-function Snippet({ text, done, onCopy }: { text: string; done: boolean; onCopy: () => void }) {
+function Snippet({ text, done, onCopy, pre = false }: { text: string; done: boolean; onCopy: () => void; pre?: boolean }) {
   return (
     <div className="mt-1.5 flex items-start gap-1.5 rounded-xl border border-white/[.06] bg-black/25 py-1.5 pl-3 pr-1.5">
-      <code className="min-w-0 flex-1 select-all break-all py-1 font-mono text-[11px] leading-relaxed text-txt/90">{text}</code>
+      <code
+        className={cx(
+          'min-w-0 flex-1 select-all py-1 font-mono text-[11px] leading-relaxed text-txt/90',
+          pre ? 'hide-scrollbar max-h-48 overflow-auto whitespace-pre' : 'break-all',
+        )}
+      >
+        {text}
+      </code>
       <CopyBtn done={done} onClick={onCopy} label="Copy" />
     </div>
   );

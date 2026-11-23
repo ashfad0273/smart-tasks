@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api, ApiError, type AuthResult, type ServerConfig } from '../../../lib/api';
 import { completeSignIn } from '../../../lib/auth';
 import { isExtension, onStorageChange, storageGet, storageSet } from '../../../lib/ext';
-import { baseKey, ONBOARDED_KEY, outboxKey, REGISTRY_KEY, statusKey } from '../../../lib/keys';
+import { baseKey, ONBOARDED_KEY, outboxKey, REGISTRY_KEY, statusKey, TOUR_KEY } from '../../../lib/keys';
 import {
   defaultCategoryOps,
   EMPTY_SET,
@@ -62,6 +62,10 @@ interface AppCtx {
   signUp(name: string, email: string, password: string): Promise<boolean>;
   signInWithGoogle(): Promise<void>;
   startLocal(): Promise<void>;
+  /** The first-run tour is showing (new accounts, or replayed from Settings). */
+  tour: boolean;
+  startTour(): void;
+  finishTour(): void;
   requestReset(email: string): Promise<boolean>;
   confirmReset(email: string, code: string, password: string): Promise<boolean>;
   switchAccount(uid: string): Promise<void>;
@@ -130,6 +134,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [screen, setScreenRaw] = useState<Screen>('welcome');
   const [addMode, setAddMode] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [tour, setTour] = useState(false);
+  const loadTour = useCallback(async () => setTour((await storageGet<unknown>(TOUR_KEY, null)) != null), []);
 
   const [data, setData] = useState<DataSet>(EMPTY_SET);
   const [status, setStatus] = useState<SyncStatus>({ state: 'syncing', lastSyncAt: null });
@@ -183,6 +189,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!alive) return;
       setRegistry(reg);
       const active = reg.accounts.find(a => a.uid === reg.activeId);
+      await loadTour();
       if (active) setScreenRaw('dashboard');
       else if (reg.accounts.length > 0 || (await storageGet<boolean>(ONBOARDED_KEY, false))) setScreenRaw('login');
       setBooted(true);
@@ -304,6 +311,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { importedLocal } = await completeSignIn(res);
       setRegistry(await loadRegistry());
       if (importedLocal) showToast('Your local tasks now sync everywhere', 'success');
+      await loadTour();
       resetView();
       setAddMode(false);
       setScreenRaw('dashboard');
@@ -351,6 +359,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!res?.ok) throw new Error(res?.error || 'Google sign-in failed.');
       setRegistry(await loadRegistry());
       if (res.importedLocal) showToast('Your local tasks now sync everywhere', 'success');
+      await loadTour();
       resetView();
       setAddMode(false);
       setScreenRaw('dashboard');
@@ -379,8 +388,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await commitRegistry({ v: 2, accounts: [...reg.accounts, acc], activeId: acc.uid });
       const cats = defaultCategoryOps();
       await mutate(acc, [...cats, ...welcomeTaskOps(cats)]);
+      await storageSet(TOUR_KEY, { step: 0 });
     }
     await storageSet(ONBOARDED_KEY, true);
+    await loadTour();
     resetView();
     setAddMode(false);
     setScreenRaw('dashboard');
@@ -410,6 +421,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (target: string) => {
       const reg = await loadRegistry();
       if (reg.activeId !== target) await commitRegistry({ ...reg, activeId: target });
+      await loadTour();
       resetView();
       setAddMode(false);
       setScreenRaw('dashboard');
@@ -672,6 +684,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAddMode(true);
     setScreenRaw('login');
   }, []);
+  const startTour = useCallback(() => {
+    void storageSet(TOUR_KEY, { step: 0 });
+    setTour(true);
+  }, []);
+  const finishTour = useCallback(() => {
+    void storageSet(TOUR_KEY, null);
+    setTour(false);
+    setScreenRaw('dashboard');
+  }, []);
   const cancelAddAccount = useCallback(() => {
     setAddMode(false);
     setScreenRaw('dashboard');
@@ -693,6 +714,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     signUp,
     signInWithGoogle,
     startLocal,
+    tour,
+    startTour,
+    finishTour,
     requestReset,
     confirmReset,
     switchAccount,

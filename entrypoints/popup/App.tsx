@@ -8,6 +8,7 @@ import DevicesScreen from './screens/DevicesScreen';
 import ActivityScreen from './screens/ActivityScreen';
 import Signup from './screens/Signup';
 import Welcome from './screens/Welcome';
+import Onboarding from './screens/Onboarding';
 import CategoryModal from './components/CategoryModal';
 import ConfirmDialog from './components/ConfirmDialog';
 import EditTaskSheet from './components/EditTaskSheet';
@@ -29,6 +30,7 @@ function Screen() {
       return <Reset />;
   }
   if (!app.account) return app.accounts.length ? <Login /> : <Welcome />;
+  if (app.tour) return <Onboarding />;
   if (app.screen === 'categories') return <CategoriesScreen />;
   if (app.screen === 'settings') return <SettingsScreen />;
   if (app.screen === 'agent') return <AgentScreen />;
@@ -43,7 +45,7 @@ function Root() {
   return (
     <>
       {/* Re-keyed per screen so every navigation fades in. */}
-      <div key={app.account ? app.screen : `out-${app.screen}`} className="anim-screen h-full">
+      <div key={app.account ? (app.tour ? 'tour' : app.screen) : `out-${app.screen}`} className="anim-screen h-full">
         <Screen />
       </div>
       {app.account && app.editTaskId && <EditTaskSheet key={app.editTaskId} />}

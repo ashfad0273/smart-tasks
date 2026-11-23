@@ -6,6 +6,7 @@ import { AGENT_NOTIFY_KEY, AGENT_SOUND_KEY, inboxKey, NOTICE_LINKS_KEY, OPEN_SCR
 import { GRACE_MS, writeReminders, type Reminder } from '../lib/reminders';
 import { activeAccount, loadRegistry, mutate, newId, readView, sync } from '../lib/store';
 import { isSameDay } from '../lib/utils';
+import { desktopHandles } from '../lib/desktop';
 import { currentVersion, download, fetchLatest, hasAccess, install, isOurFolder, isUnpacked, loadFolder, newer, type UpdateInfo } from '../lib/updater';
 
 /**
@@ -83,8 +84,21 @@ export default defineBackground(() => {
       const sent = await storageGet<Record<string, number>>(REMINDERS_SENT_KEY, {});
       const now = Date.now();
       let dirty = false;
+      // The Windows app on this computer shows reminders itself: stay quiet (but
+      // still mark them sent, so nothing fires late if the app quits).
+      let deferred: boolean | null = null;
+      const toDesktop = async () => {
+        if (deferred === null) {
+          const acc = await activeAccount();
+          deferred = !!acc && !acc.local && (await desktopHandles(acc.uid, 'reminders'));
+        }
+        return deferred;
+      };
       for (const r of list) {
         if (r.dueAt <= now && r.dueAt > now - GRACE_MS && sent[r.id] !== r.dueAt) {
+          sent[r.id] = r.dueAt;
+          dirty = true;
+          if (await toDesktop()) continue;
           chrome.notifications.create(`st-reminder:${r.id}`, {
             type: 'basic',
             iconUrl: chrome.runtime.getURL('icon/128.png'),
@@ -94,8 +108,6 @@ export default defineBackground(() => {
             priority: 2,
             requireInteraction: true,
           });
-          sent[r.id] = r.dueAt;
-          dirty = true;
         }
       }
       const horizon = now - 24 * 3600_000;
@@ -147,8 +159,10 @@ export default defineBackground(() => {
             const inbox = await storageGet<InboxItem[]>(inboxKey(a.uid), []);
             const have = new Set(inbox.map(i => i.id));
             const add = fresh.filter(n => !have.has(n.id));
-            await storageSet(inboxKey(a.uid), [...inbox, ...add.map(n => ({ ...n, read: !allowed }))].slice(-100));
-            if (allowed && add.length) {
+            // The Windows app on this computer shows them instead: keep them as read here.
+            const show = allowed && add.length > 0 && !(await desktopHandles(a.uid, 'agent'));
+            await storageSet(inboxKey(a.uid), [...inbox, ...add.map(n => ({ ...n, read: !show }))].slice(-100));
+            if (show) {
               const links = await storageGet<Record<string, string>>(NOTICE_LINKS_KEY, {});
               for (const n of add) {
                 const id = `st-agent:${a.uid}:${n.id}`;

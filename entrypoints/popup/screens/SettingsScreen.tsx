@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bell, Bot, ChevronLeft, MonitorSmartphone, Download, Keyboard, LogOut, Pencil, RefreshCw, Tags, Trash2, Users } from 'lucide-react';
+import { Bell, Bot, ChevronLeft, Compass, MonitorSmartphone, Download, Keyboard, LogOut, Pencil, RefreshCw, Tags, Trash2, Users } from 'lucide-react';
 import { API_URL, SITE_URL } from '../../../lib/api';
 import { manifestVersion, onStorageChange, storageGet, storageSet } from '../../../lib/ext';
 import { REMINDERS_ENABLED_KEY, REMINDERS_KEY, UPDATE_KEY } from '../../../lib/keys';
 import { newer, type UpdateInfo } from '../../../lib/updater';
+import { desktopShortcut, isDesktopApp } from '../../../lib/desktop';
 import { formatDue } from '../../../lib/utils';
 import type { Reminder } from '../../../lib/reminders';
 import { useApp } from '../state/AppContext';
@@ -219,6 +220,11 @@ export default function SettingsScreen() {
               Connect
             </button>
           </Row>
+          <Row icon={<Compass size={14} />} label="Welcome tour">
+            <button onClick={app.startTour} className="press text-[12px] font-medium text-acc hover:underline">
+              Replay
+            </button>
+          </Row>
           <Row icon={<Download size={14} />} label="Export data">
             <button onClick={() => void app.exportData()} className="press text-[12px] font-medium text-acc hover:underline">
               JSON
@@ -229,7 +235,7 @@ export default function SettingsScreen() {
         <Card title="Shortcuts" icon={<Keyboard size={11} />}>
           <ul className="mt-2.5 space-y-2 text-[12.5px] text-mut">
             {[
-              ['Open', 'Ctrl/⌘ + Shift + K'],
+              ['Open', isDesktopApp() ? desktopShortcut() : 'Ctrl/⌘ + Shift + K'],
               ['New task', 'N'],
               ['Search', '/'],
               ['Close', 'Esc'],

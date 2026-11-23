@@ -8,6 +8,8 @@ export const ONBOARDED_KEY = 'st-onboarded';
 export const AGENT_NOTIFY_KEY = 'st-agent-notify';
 export const NOTICE_LINKS_KEY = 'st-notice-links';
 export const AGENT_SOUND_KEY = 'st-agent-sound';
+/** Last AI app picked on the AI agent screen (an id from lib/agents.ts). */
+export const AGENT_CLIENT_KEY = 'st-agent-client';
 /** Set by the service worker when a notification click should land on a screen. */
 export const OPEN_SCREEN_KEY = 'st-open-screen';
 /** Newer release found by the updater: UpdateInfo or null. */
@@ -23,3 +25,5 @@ export const statusKey = (uid: string) => `st-status:${uid}`;
 export const noticesSeenKey = (uid: string) => `st-notices-seen:${uid}`;
 /** Agent notifications received on this device, newest last, with a read flag. */
 export const inboxKey = (uid: string) => `st-inbox:${uid}`;
+/** The first-run tour: `{ step }` while it is in progress (it resumes there), null once finished. */
+export const TOUR_KEY = 'st-tour';

@@ -2,7 +2,7 @@
   "name": "smart-tasks",
   "description": "A playful, synced to-do list Chrome extension backed by Cloudflare Workers.",
   "private": true,
-  "version": "1.4.1",
+  "version": "1.5.1",
   "type": "module",
   "scripts": {
     "dev": "wxt dev",
@@ -14,7 +14,11 @@
     "worker:deploy": "npm --prefix worker run deploy",
     "postinstall": "wxt prepare",
     "site": "wxt build && node scripts/build-site.mjs",
-    "site:deploy": "npm run site && worker/node_modules/.bin/wrangler deploy -c site/wrangler.jsonc"
+    "site:deploy": "npm run site && worker/node_modules/.bin/wrangler deploy -c site/wrangler.jsonc",
+    "desktop:dev": "node desktop/scripts/tauri.mjs dev",
+    "desktop:build": "node desktop/scripts/tauri.mjs build",
+    "desktop:mac:fetch": "node desktop/scripts/fetch-mac.mjs",
+    "desktop:compile": "tsc --noEmit -p desktop/tsconfig.json"
   },
   "dependencies": {
     "lucide-react": "^1.42.0",
@@ -23,6 +27,8 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/api": "^2.12.5",
+    "@tauri-apps/cli": "^2.12.6",
     "@types/chrome": "^0.2.9",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

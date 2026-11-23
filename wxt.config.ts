@@ -18,11 +18,14 @@ export default defineConfig({
   manifest: {
     name: 'Smart Tasks: To-Do List & Reminders',
     short_name: 'Smart Tasks',
-    version: '1.4.1',
+    version: '1.5.1',
     description:
       'Capture tasks in a click, get reminders on time and stay in sync on every device. Works with AI agents like Claude.',
     minimum_chrome_version: '116',
     permissions: ['storage', 'identity', 'alarms', 'notifications', 'contextMenus', 'offscreen'],
+    // Loopback only: asks the Smart Tasks Windows app (if running) whether it is
+    // showing notifications, so they don't pop up twice. See lib/desktop.ts.
+    host_permissions: ['http://127.0.0.1/*'],
     action: { default_title: 'Smart Tasks' },
     commands: {
       _execute_action: {

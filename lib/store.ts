@@ -1,4 +1,5 @@
 import { api, ApiError } from './api';
+import { desktopShortcut, isDesktopApp } from './desktop';
 import { storageGet, storageRemove, storageSetMany, withLock } from './ext';
 import { baseKey, outboxKey, REGISTRY_KEY, statusKey } from './keys';
 import type { AccountInfo, Category, Change, DataSet, Registry, SyncOp, SyncStatus, Task } from './types';
@@ -244,7 +245,10 @@ export function welcomeTaskOps(categoryOps: SyncOp[]): SyncOp[] {
         { id: uid4(), title: 'Drag subtasks to reorder', done: false },
       ],
     }, 1),
-    t('Right-click any web page to save it here', { dueAt: tonight.getTime(), priority: 'low' }, 2),
+    t(isDesktopApp() ? `Press ${desktopShortcut()} to open Smart Tasks from anywhere` : 'Right-click any web page to save it here', {
+      dueAt: tonight.getTime(),
+      priority: 'low',
+    }, 2),
   ];
 }
 

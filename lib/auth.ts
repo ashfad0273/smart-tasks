@@ -1,6 +1,6 @@
 import { api, type AuthResult } from './api';
 import { storageSet } from './ext';
-import { ONBOARDED_KEY } from './keys';
+import { ONBOARDED_KEY, TOUR_KEY } from './keys';
 import { defaultCategoryOps, loadRegistry, mutate, newId, purgeLocal, readView, saveRegistry, sync, welcomeTaskOps } from './store';
 import type { AccountInfo, SyncOp } from './types';
 import { hueFromString } from './utils';
@@ -30,6 +30,7 @@ export async function completeSignIn(res: AuthResult): Promise<{ account: Accoun
 
   let importedLocal = false;
   if (res.created) {
+    await storageSet(TOUR_KEY, { step: 0 }); // brand-new account: show the tour
     const local = prevActive?.local ? prevActive : null;
     let ops: SyncOp[];
     if (local) {
