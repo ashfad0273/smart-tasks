@@ -1,0 +1,101 @@
+// Builds the public download page (site/public) from the production extension build.
+//   1. zips dist/chrome-mv3 as smart-tasks-<version>.zip (and smart-tasks-latest.zip)
+//   2. renders CHANGELOG.md into site/template.html
+// Run `npm run site` (builds the extension first) and `npm run site:deploy` to publish.
+import { execFileSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const dist = join(root, 'dist/chrome-mv3');
+const out = join(root, 'site/public');
+const API = 'https://smart-tasks-api.ashfadhossain0.workers.dev';
+
+const manifest = JSON.parse(readFileSync(join(dist, 'manifest.json'), 'utf8'));
+const version = manifest.version;
+if (readFileSync(join(dist, 'background.js'), 'utf8').includes('localhost:')) {
+  throw new Error('dist/ was built against a local API. Run `npm run build` without VITE_API_URL first.');
+}
+
+rmSync(out, { recursive: true, force: true });
+mkdirSync(out, { recursive: true });
+
+// Zip the folder contents under a "smart-tasks" folder so it unzips cleanly.
+const zip = `smart-tasks-${version}.zip`;
+const stage = join(root, '.site-stage');
+rmSync(stage, { recursive: true, force: true });
+mkdirSync(stage);
+execFileSync('cp', ['-R', dist, join(stage, 'smart-tasks')]);
+execFileSync('zip', ['-qr', '-X', join(out, zip), 'smart-tasks'], { cwd: stage });
+rmSync(stage, { recursive: true, force: true });
+copyFileSync(join(out, zip), join(out, 'smart-tasks-latest.zip'));
+const kb = Math.round(statSync(join(out, zip)).size / 1024);
+const size = kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
+
+copyFileSync(join(root, 'public/icon/128.png'), join(out, 'icon-128.png'));
+
+/* ── changelog markdown → HTML (just the subset CHANGELOG.md uses) ───────── */
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`(.+?)`/g, '<code>$1</code>');
+const chev = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+
+const releases = [];
+for (const line of readFileSync(join(root, 'CHANGELOG.md'), 'utf8').split('\n')) {
+  const rel = /^## (\S+)\s*-\s*(.+)$/.exec(line);
+  const grp = /^### (.+)$/.exec(line);
+  const item = /^- (.+)$/.exec(line);
+  if (rel) releases.push({ version: rel[1], date: rel[2].trim(), groups: [] });
+  else if (grp && releases.length) releases.at(-1).groups.push({ name: grp[1].trim(), items: [] });
+  else if (item && releases.at(-1)?.groups.length) releases.at(-1).groups.at(-1).items.push(item[1]);
+}
+if (!releases.length) throw new Error('CHANGELOG.md has no releases');
+if (releases[0].version !== version) {
+  throw new Error(`CHANGELOG.md tops out at ${releases[0].version} but the extension is ${version}. Add release notes first.`);
+}
+
+const fmtDate = d => {
+  const t = new Date(`${d}T12:00:00Z`);
+  return Number.isNaN(+t) ? d : t.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+};
+const changelog = releases
+  .map(
+    (r, i) => `<details class="release"${i === 0 ? ' open' : ''} id="v${r.version}">
+  <summary><span class="ver">${esc(r.version)}</span>${i === 0 ? '<span class="latest">Latest</span>' : ''}<span class="date">${esc(fmtDate(r.date))}</span>${chev}</summary>
+  <div class="body">${r.groups
+    .map(g => `<div class="group"><span class="tag ${esc(g.name.toLowerCase())}">${esc(g.name)}</span><ul>${g.items.map(x => `<li>${inline(x)}</li>`).join('')}</ul></div>`)
+    .join('')}</div>
+</details>`,
+  )
+  .join('\n');
+
+/* ── logo (same artwork as the extension icon) ───────────────────────────── */
+const logo = id => `<svg viewBox="16 16 480 480" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<defs><linearGradient id="${id}b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6ff0dc"/><stop offset=".5" stop-color="#3fd1c5"/><stop offset="1" stop-color="#2794bd"/></linearGradient>
+<linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+<rect x="16" y="16" width="480" height="480" rx="124" fill="url(#${id}b)"/><rect x="16" y="16" width="480" height="480" rx="124" fill="url(#${id}s)"/>
+<rect x="100" y="120" width="140" height="36" rx="18" fill="#0b1a1c" opacity=".22"/><rect x="100" y="190" width="88" height="36" rx="18" fill="#0b1a1c" opacity=".22"/>
+<path d="M164 318 L234 386 L404 214" fill="none" stroke="#0b1a1c" stroke-width="62" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M392 64 C396 92 404 100 432 104 C404 108 396 116 392 144 C388 116 380 108 352 104 C380 100 388 92 392 64 Z" fill="#fff"/>
+<circle cx="446" cy="160" r="11" fill="#fff" opacity=".85"/></svg>`;
+
+const html = readFileSync(join(root, 'site/template.html'), 'utf8')
+  .replaceAll('{{VERSION}}', esc(version))
+  .replaceAll('{{SIZE}}', size)
+  .replaceAll('{{ZIP}}', zip)
+  .replaceAll('{{DATE}}', esc(fmtDate(releases[0].date)))
+  .replaceAll('{{API}}', API)
+  .replaceAll('{{LOGO}}', logo('n'))
+  .replaceAll('{{LOGO_BIG}}', logo('h'))
+  .replaceAll('{{CHANGELOG}}', changelog);
+writeFileSync(join(out, 'index.html'), html);
+copyFileSync(join(root, 'CHANGELOG.md'), join(out, 'CHANGELOG.md'));
+
+// Zips should download, and the page should always be fresh.
+writeFileSync(
+  join(out, '_headers'),
+  `/*.zip\n  Content-Type: application/zip\n  Cache-Control: public, max-age=300\n/\n  Cache-Control: no-cache\n/index.html\n  Cache-Control: no-cache\n`,
+);
+
+console.log(`site/public ready: ${zip} (${size}), ${releases.length} releases in the changelog`);
+if (!existsSync(join(out, 'index.html'))) process.exit(1);

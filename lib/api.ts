@@ -7,6 +7,9 @@ import type { AuthUser, Change, SyncOp } from './types';
 export const API_URL: string = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, '') ||
   'https://smart-tasks-api.ashfadhossain0.workers.dev';
 
+/** Public download page and changelog (static site on Workers, see site/). */
+export const SITE_URL = 'https://smart-tasks.ashfadhossain0.workers.dev';
+
 export class ApiError extends Error {
   constructor(
     public status: number,

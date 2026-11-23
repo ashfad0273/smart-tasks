@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Bell, Bot, ChevronLeft, MonitorSmartphone, Download, Keyboard, LogOut, Pencil, RefreshCw, Tags, Trash2, Users } from 'lucide-react';
-import { API_URL } from '../../../lib/api';
+import { API_URL, SITE_URL } from '../../../lib/api';
 import { manifestVersion, onStorageChange, storageGet, storageSet } from '../../../lib/ext';
 import { REMINDERS_ENABLED_KEY, REMINDERS_KEY } from '../../../lib/keys';
 import { formatDue } from '../../../lib/utils';
@@ -240,7 +240,9 @@ export default function SettingsScreen() {
         </button>
 
         <p className="flex items-center justify-center gap-2 pt-1 text-[11px] text-mut/70">
-          <span>v{manifestVersion()}</span>
+          <a href={`${SITE_URL}/#changelog`} target="_blank" rel="noreferrer" className="hover:text-txt hover:underline" title="What's new">
+            v{manifestVersion()}
+          </a>
           <span aria-hidden="true">·</span>
           <a href={`${API_URL}/privacy`} target="_blank" rel="noreferrer" className="hover:text-txt hover:underline">
             Privacy

@@ -1,0 +1,9 @@
+{
+  // Static download page + changelog for the extension (built by scripts/build-site.mjs).
+  "$schema": "../worker/node_modules/wrangler/config-schema.json",
+  "name": "smart-tasks",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./public"
+  }
+}

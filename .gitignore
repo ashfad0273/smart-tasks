@@ -23,3 +23,7 @@ worker/.wrangler/
 # misc
 *.log
 .DS_Store
+
+# download site build output
+site/public/
+.site-stage/

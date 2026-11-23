@@ -18,7 +18,7 @@ export default defineConfig({
   manifest: {
     name: 'Smart Tasks: To-Do List & Reminders',
     short_name: 'Smart Tasks',
-    version: '1.0.0',
+    version: '1.3.0',
     description:
       'Capture tasks in a click, get reminders on time and stay in sync on every device. Works with AI agents like Claude.',
     minimum_chrome_version: '116',

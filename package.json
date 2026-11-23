@@ -2,7 +2,7 @@
   "name": "smart-tasks",
   "description": "A playful, synced to-do list Chrome extension backed by Cloudflare Workers.",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.3.0",
   "type": "module",
   "scripts": {
     "dev": "wxt dev",
@@ -12,7 +12,9 @@
     "smoke": "node scripts/smoke.cjs",
     "worker:dev": "npm --prefix worker run dev",
     "worker:deploy": "npm --prefix worker run deploy",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "site": "wxt build && node scripts/build-site.mjs",
+    "site:deploy": "npm run site && worker/node_modules/.bin/wrangler deploy -c site/wrangler.jsonc"
   },
   "dependencies": {
     "lucide-react": "^1.42.0",
