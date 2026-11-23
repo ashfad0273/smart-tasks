@@ -16,6 +16,7 @@ import {
 import type { Priority, Subtask, Task } from '../../../lib/types';
 import { useApp } from '../state/AppContext';
 import Sheet from './Sheet';
+import DueEditor from './DueEditor';
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -238,10 +239,14 @@ export default function EditTaskSheet() {
                 onClick={() => setPriority(priority === p ? null : p)}
                 aria-pressed={priority === p}
                 className={cx(
-                  'press rounded-xl border py-2 text-xs font-semibold transition-all',
-                  priority === p ? 'scale-[1.03] border-transparent text-white shadow-lg' : 'border-line bg-surface2 text-mut hover:text-txt',
+                  'press flex items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-semibold transition-colors',
+                  priority === p ? '' : 'border-white/[.06] bg-white/[.03] text-mut hover:text-txt',
                 )}
-                style={priority === p ? { background: PRIORITY_META[p].color } : undefined}
+                style={
+                  priority === p
+                    ? { borderColor: PRIORITY_META[p].color, color: PRIORITY_META[p].color, background: `${PRIORITY_META[p].color}12` }
+                    : undefined
+                }
               >
                 <span className="h-1.5 w-1.5 rounded-full" style={{ background: PRIORITY_META[p].color }} /> {PRIORITY_META[p].label}
               </button>
@@ -250,43 +255,8 @@ export default function EditTaskSheet() {
         </Section>
 
         <Section label="When">
-          <div className="flex flex-wrap gap-1.5">
-            {([['Today', 0], ['Tomorrow', 1], ['Next week', 7]] as Array<[string, number]>).map(([label, off]) => (
-              <button
-                key={label}
-                onClick={() => setDueAt(dayAtTime(off, dueAt))}
-                className={cx(
-                  'press rounded-full border px-3 py-1.5 text-xs font-semibold',
-                  isDayActive(off) ? 'border-acc/50 bg-acc/15 text-acc' : 'border-line bg-surface2 text-mut hover:text-txt',
-                )}
-              >
-                {label}
-              </button>
-            ))}
-            <input
-              type="date"
-              value={toDateInput(dueAt)}
-              onChange={e => e.target.value && setDueAt(dateInputToMs(e.target.value, dueAt))}
-              aria-label="Due date"
-              className="rounded-full border border-line bg-surface2 px-3 py-1.5 text-xs font-semibold text-txt outline-none focus:border-acc/60"
-            />
-            <input
-              type="time"
-              value={toTimeInput(dueAt)}
-              onChange={e => e.target.value && setDueAt(timeInputToMs(e.target.value, dueAt))}
-              aria-label="Due time"
-              className="rounded-full border border-line bg-surface2 px-3 py-1.5 text-xs font-semibold text-txt outline-none focus:border-acc/60"
-            />
-            {dueAt && (
-              <button
-                onClick={() => setDueAt(null)}
-                className="press inline-flex items-center gap-1 rounded-full border border-line bg-surface2 px-3 py-1.5 text-xs font-semibold text-mut hover:border-danger/40 hover:text-danger"
-              >
-                <X size={10} /> Clear
-              </button>
-            )}
-          </div>
-          {dueAt && <p className="mt-1.5 text-[11px] font-semibold text-mut">You'll get a reminder at this time.</p>}
+          <DueEditor value={dueAt} onChange={setDueAt} />
+          {dueAt && <p className="mt-2 text-[11px] text-mut">Reminder at this time.</p>}
         </Section>
 
         <Section label={`Subtasks${subtasks.length ? ` · ${doneSubs}/${subtasks.length}` : ''}`}>
