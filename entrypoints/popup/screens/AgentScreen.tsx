@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BellRing, Bot, Check, ChevronLeft, Copy, KeyRound } from 'lucide-react';
+import { BellRing, Bot, Check, ChevronLeft, Copy, KeyRound, Volume2 } from 'lucide-react';
 import { storageGet, storageSet } from '../../../lib/ext';
-import { AGENT_NOTIFY_KEY } from '../../../lib/keys';
+import { AGENT_NOTIFY_KEY, AGENT_SOUND_KEY } from '../../../lib/keys';
 import { Toggle } from './SettingsScreen';
 import { api, API_URL, ApiError } from '../../../lib/api';
 import { useApp } from '../state/AppContext';
@@ -25,9 +25,11 @@ export default function AgentScreen() {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [notifyOn, setNotifyOn] = useState<boolean | null>(null);
+  const [soundOn, setSoundOn] = useState<boolean | null>(null);
 
   useEffect(() => {
     void storageGet<boolean>(AGENT_NOTIFY_KEY, true).then(setNotifyOn);
+    void storageGet<boolean>(AGENT_SOUND_KEY, true).then(setSoundOn);
   }, []);
 
   const fail = useCallback(
@@ -170,22 +172,46 @@ export default function AgentScreen() {
               )}
             </section>
 
-            <section className="anim-card flex items-center gap-2.5 rounded-2xl border border-line bg-surface p-3.5">
-              <BellRing size={14} className="shrink-0 text-mut" />
-              <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-medium">Agent notifications</p>
-                <p className="text-[11px] text-mut">Let your agent ping you on this computer when it has news.</p>
+            <section className="anim-card divide-y divide-white/[.05] rounded-2xl border border-line bg-surface">
+              <div className="flex items-center gap-2.5 p-3.5">
+                <BellRing size={14} className="shrink-0 text-mut" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-medium">Agent notifications</p>
+                  <p className="text-[11px] text-mut">Let your agent ping you on this computer when it has news.</p>
+                </div>
+                {notifyOn !== null && (
+                  <Toggle
+                    label="Agent notifications"
+                    on={notifyOn}
+                    onChange={v => {
+                      setNotifyOn(v);
+                      void storageSet(AGENT_NOTIFY_KEY, v);
+                    }}
+                  />
+                )}
               </div>
-              {notifyOn !== null && (
-                <Toggle
-                  label="Agent notifications"
-                  on={notifyOn}
-                  onChange={v => {
-                    setNotifyOn(v);
-                    void storageSet(AGENT_NOTIFY_KEY, v);
-                  }}
-                />
-              )}
+              <div className="expander" data-open={!!notifyOn}>
+                <div>
+                  <div className="flex items-center gap-2.5 p-3.5">
+                    <Volume2 size={14} className="shrink-0 text-mut" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-medium">Sound</p>
+                      <p className="text-[11px] text-mut">A soft two-note chime, different from reminders.</p>
+                    </div>
+                    {soundOn !== null && (
+                      <Toggle
+                        label="Notification sound"
+                        on={soundOn}
+                        onChange={v => {
+                          setSoundOn(v);
+                          void storageSet(AGENT_SOUND_KEY, v);
+                          if (v) previewChime();
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
             </section>
 
             <section className="anim-card rounded-2xl border border-line bg-surface p-3.5">
@@ -208,6 +234,32 @@ export default function AgentScreen() {
       </div>
     </div>
   );
+}
+
+/** Play the agent chime right here so the user hears what it sounds like. */
+function previewChime() {
+  try {
+    const ac = new AudioContext();
+    const t = ac.currentTime + 0.02;
+    for (const [freq, at, len, vol] of [
+      [1318.5, 0, 0.55, 0.22],
+      [1975.5, 0.11, 0.8, 0.18],
+    ] as const) {
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t + at);
+      g.gain.exponentialRampToValueAtTime(vol, t + at + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + at + len);
+      g.connect(ac.destination);
+      const o = ac.createOscillator();
+      o.frequency.value = freq;
+      o.connect(g);
+      o.start(t + at);
+      o.stop(t + at + len + 0.05);
+    }
+    setTimeout(() => void ac.close(), 1500);
+  } catch {
+    /* no audio available */
+  }
 }
 
 function CopyBtn({ done, onClick, label }: { done: boolean; onClick: () => void; label: string }) {

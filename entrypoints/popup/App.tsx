@@ -5,6 +5,7 @@ import Reset from './screens/Reset';
 import SettingsScreen from './screens/SettingsScreen';
 import AgentScreen from './screens/AgentScreen';
 import DevicesScreen from './screens/DevicesScreen';
+import ActivityScreen from './screens/ActivityScreen';
 import Signup from './screens/Signup';
 import Welcome from './screens/Welcome';
 import CategoryModal from './components/CategoryModal';
@@ -32,6 +33,7 @@ function Screen() {
   if (app.screen === 'settings') return <SettingsScreen />;
   if (app.screen === 'agent') return <AgentScreen />;
   if (app.screen === 'devices') return <DevicesScreen />;
+  if (app.screen === 'activity') return <ActivityScreen />;
   return <Dashboard />;
 }
 

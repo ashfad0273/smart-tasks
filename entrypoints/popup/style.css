@@ -236,6 +236,38 @@ textarea:focus-visible {
 .glow {
   box-shadow: 0 6px 22px -8px rgba(63, 209, 197, 0.45);
 }
+/* Slim header progress: gradient fill, a soft sheen that sweeps across, and a glowing tip. */
+.meter-fill {
+  position: relative;
+  background: linear-gradient(90deg, #2794bd 0%, #3fd1c5 70%, #6ff0dc 100%);
+  box-shadow: 0 0 10px rgba(63, 209, 197, 0.45);
+  overflow: visible;
+}
+.meter-fill::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.45) 50%, transparent 100%) no-repeat;
+  background-size: 60px 100%;
+  animation: sheen 2.8s ease-in-out infinite;
+}
+.meter-fill::after {
+  content: '';
+  position: absolute;
+  right: -2px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+  background: #b9fff3;
+  box-shadow: 0 0 0 2px rgba(63, 209, 197, 0.25), 0 0 10px 2px rgba(111, 240, 220, 0.7);
+}
+@keyframes sheen {
+  from { background-position: -60px 0; }
+  to { background-position: calc(100% + 60px) 0; }
+}
 /* Solid accent fill (progress bars, toggles, logo). */
 .grad-acc {
   background: linear-gradient(135deg, #3fd1c5 0%, #34b3d1 100%);

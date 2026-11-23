@@ -11,6 +11,19 @@ import { BadRequest, categoryDefaults, LIMITS, taskDefaults, type Change, type S
  */
 const NOTICE_HOURLY_LIMIT = 30;
 
+export type Actor = 'me' | 'agent';
+export type ActivityType = 'added' | 'completed' | 'reopened' | 'deleted' | 'notice';
+export interface ActivityEvent {
+  id: number;
+  at: number;
+  type: ActivityType;
+  taskId: string | null;
+  title: string;
+  /** Notification body for "notice" events. */
+  detail: string | null;
+  by: Actor;
+}
+
 export class UserHub extends DurableObject<Env> {
   private sql: SqlStorage;
 
@@ -28,8 +41,44 @@ export class UserHub extends DurableObject<Env> {
         id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, message TEXT NOT NULL,
         url TEXT, created_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS activity (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, type TEXT NOT NULL,
+        task_id TEXT, title TEXT NOT NULL, detail TEXT, by TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS activity_at ON activity(at);
     `);
+    this.backfillActivity();
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+  }
+
+  /** First run after the activity log shipped: seed it from existing tasks' timestamps. */
+  private backfillActivity(): void {
+    const done = this.sql.exec<{ v: number }>(`SELECT v FROM meta WHERE k = 'activity_v'`).toArray()[0];
+    if (done) return;
+    this.ctx.storage.transactionSync(() => {
+      const tasks = this.sql
+        .exec<{ id: string; data: string }>(`SELECT id, data FROM items WHERE kind = 'task' AND deleted = 0`)
+        .toArray();
+      for (const t of tasks) {
+        const d = JSON.parse(t.data) as Record<string, unknown>;
+        const title = String(d.title ?? '');
+        if (typeof d.createdAt === 'number') this.log(d.createdAt, 'added', t.id, title, 'me');
+        if (typeof d.completedAt === 'number') this.log(d.completedAt, 'completed', t.id, title, 'me');
+      }
+      this.sql.exec(`INSERT INTO meta (k, v) VALUES ('activity_v', 1) ON CONFLICT (k) DO UPDATE SET v = 1`);
+    });
+  }
+
+  private log(at: number, type: ActivityType, taskId: string | null, title: string, by: Actor, detail: string | null = null): void {
+    this.sql.exec(
+      `INSERT INTO activity (at, type, task_id, title, detail, by) VALUES (?, ?, ?, ?, ?, ?)`,
+      Math.min(at, Date.now()),
+      type,
+      taskId,
+      title.slice(0, 200),
+      detail,
+      by,
+    );
   }
 
   private rev(): number {
@@ -67,7 +116,36 @@ export class UserHub extends DurableObject<Env> {
       .map(r => ({ ...(JSON.parse(r.data) as Record<string, unknown>), id: r.id }));
   }
 
-  push(ops: SyncOp[]): { rev: number } {
+  /** Newest-first history page: tasks added, completed, reopened, deleted and agent notifications.
+   *  `cursor` is the `next` value of the previous page ("<at>_<id>"), or empty for the newest. */
+  activity(cursor: string, limit: number): { events: ActivityEvent[]; next: string | null } {
+    const m = /^(\d+)_(\d+)$/.exec(cursor);
+    const at = m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
+    const id = m ? Number(m[2]) : Number.MAX_SAFE_INTEGER;
+    const rows = this.sql
+      .exec<{ id: number; at: number; type: string; task_id: string | null; title: string; detail: string | null; by: string }>(
+        `SELECT id, at, type, task_id, title, detail, by FROM activity WHERE at < ? OR (at = ? AND id < ?) ORDER BY at DESC, id DESC LIMIT ?`,
+        at,
+        at,
+        id,
+        limit + 1,
+      )
+      .toArray();
+    const page = rows.slice(0, limit);
+    const events = page.map(r => ({
+      id: r.id,
+      at: r.at,
+      type: r.type as ActivityType,
+      taskId: r.task_id,
+      title: r.title,
+      detail: r.detail,
+      by: r.by as Actor,
+    }));
+    const last = page[page.length - 1];
+    return { events, next: rows.length > limit && last ? `${last.at}_${last.id}` : null };
+  }
+
+  push(ops: SyncOp[], by: Actor = 'me'): { rev: number } {
     if (ops.length === 0) return { rev: this.rev() };
     let rev = this.rev();
     const now = Date.now();
@@ -94,6 +172,7 @@ export class UserHub extends DurableObject<Env> {
         if (op.op === 'delete') {
           if (!existing || existing.deleted) continue;
           write(op.kind, op.id, null);
+          if (op.kind === 'task') this.log(now, 'deleted', op.id, String(JSON.parse(existing.data ?? '{}').title ?? ''), by);
           if (op.kind === 'category') {
             // Orphaned tasks become uncategorized.
             const tasks = this.sql
@@ -118,8 +197,19 @@ export class UserHub extends DurableObject<Env> {
           if (count >= LIMITS.itemsPerKind) throw new BadRequest(`Limit of ${LIMITS.itemsPerKind} ${op.kind}s reached`);
           base = op.kind === 'task' ? taskDefaults(now) : categoryDefaults(now);
         }
-        write(op.kind, op.id, { ...base, ...op.data });
+        const next = { ...base, ...op.data };
+        write(op.kind, op.id, next);
+        if (op.kind === 'task') {
+          const title = String(next.title ?? '');
+          const was = existing ? base.completedAt : null;
+          const is = next.completedAt;
+          if (!existing) this.log(typeof next.createdAt === 'number' ? next.createdAt : now, 'added', op.id, title, by);
+          if (was == null && typeof is === 'number') this.log(is, 'completed', op.id, title, by);
+          else if (was != null && is == null) this.log(now, 'reopened', op.id, title, by);
+        }
       }
+      // Keep about a year of history.
+      this.sql.exec(`DELETE FROM activity WHERE at < ?`, now - 365 * 86_400_000);
 
       this.sql.exec(`INSERT INTO meta (k, v) VALUES ('rev', ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v`, rev);
     });
@@ -147,6 +237,7 @@ export class UserHub extends DurableObject<Env> {
       )
       .one().id;
     this.sql.exec(`DELETE FROM notices WHERE created_at < ?`, now - 7 * 86_400_000);
+    this.log(now, 'notice', null, n.title, 'agent', n.message);
     const msg = JSON.stringify({ type: 'notice' });
     for (const ws of this.ctx.getWebSockets()) {
       try {

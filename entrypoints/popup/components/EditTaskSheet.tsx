@@ -6,6 +6,7 @@ import {
   cx,
   dateInputToMs,
   dayAtTime,
+  formatStamp,
   isSameDay,
   PRIORITY_META,
   startOfDay,
@@ -387,6 +388,19 @@ export default function EditTaskSheet() {
             </button>
           </div>
         </Section>
+
+        {task && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px] text-mut">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-mut/50" /> Added {formatStamp(task.createdAt)}
+            </span>
+            {task.completedAt && (
+              <span className="inline-flex items-center gap-1.5 text-acc/90">
+                <span className="h-1.5 w-1.5 rounded-full bg-acc" /> Completed {formatStamp(task.completedAt)}
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="sticky bottom-0 -mx-4 mt-4 flex gap-2 border-t border-white/[.05] bg-surface px-4 pb-4 pt-3">
           <button

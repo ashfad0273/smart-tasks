@@ -4,6 +4,7 @@ import {
   CircleDashed,
   Flame,
   FolderOpen,
+  History,
   Layers,
   ListPlus,
   Plus,
@@ -14,6 +15,9 @@ import {
   X,
 } from 'lucide-react';
 import { cx, startOfDay } from '../../../lib/utils';
+import { onStorageChange, storageGet, storageSet } from '../../../lib/ext';
+import { inboxKey, OPEN_SCREEN_KEY } from '../../../lib/keys';
+import type { InboxItem } from '../../../lib/api';
 import { useApp, type Tab } from '../state/AppContext';
 import Confetti from '../components/Confetti';
 import EmptyState from '../components/EmptyState';
@@ -128,6 +132,21 @@ export default function Dashboard() {
     return () => window.removeEventListener('keydown', onKey);
   }, [app.editTaskId, app.confirmData, adding]);
 
+  // Unread AI notifications for the bell; a notification click can ask to land on Activity.
+  const [unread, setUnread] = useState(0);
+  const uid = acc && !acc.local ? acc.uid : null;
+  useEffect(() => {
+    if (!uid) return setUnread(0);
+    const read = async () => setUnread((await storageGet<InboxItem[]>(inboxKey(uid), [])).filter(i => !i.read).length);
+    void read();
+    void storageGet<string | null>(OPEN_SCREEN_KEY, null).then(s => {
+      if (s !== 'activity') return;
+      void storageSet(OPEN_SCREEN_KEY, null);
+      app.setScreen('activity');
+    });
+    return onStorageChange(keys => keys.includes(inboxKey(uid)) && void read());
+  }, [uid, app]);
+
   const sections = useMemo(() => sectionize(app.visibleTasks), [app.visibleTasks]);
   const streak = useMemo(() => streakOf(app.tasks), [app.tasks]);
   const doneToday = useMemo(() => {
@@ -160,13 +179,14 @@ export default function Dashboard() {
       <header className="flex items-center gap-3 px-6 pt-6">
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
-            <p className="text-[15px] font-medium tabular-nums">
+            <p className="text-[12.5px] font-semibold tabular-nums tracking-tight">
               <span key={app.counts.completed} className="anim-tick inline-block text-acc">
                 {app.counts.completed}
-              </span>{' '}
-              <span className="text-mut">of {app.counts.total} done</span>
+              </span>
+              <span className="text-mut/60">/{app.counts.total}</span>
+              <span className="ml-1 font-medium text-mut">done</span>
             </p>
-            <span className="truncate text-[11px] text-mut">
+            <span className="truncate text-[10.5px] font-medium tracking-wide text-mut/70">
               {app.counts.total === 0
                 ? 'Fresh start'
                 : pct === 100
@@ -176,11 +196,13 @@ export default function Dashboard() {
                     : `${app.counts.pending} to go`}
             </span>
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[.06]" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Tasks done">
-            <div
-              className={cx('grad-acc h-full rounded-full transition-[width] duration-700 ease-[var(--ease-out)]', pct === 100 && 'glow')}
-              style={{ width: `${Math.max(pct, app.counts.total ? 2 : 0)}%` }}
-            />
+          <div className="mt-1.5 h-[3px] rounded-full bg-white/[.05]" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Tasks done">
+            {pct > 0 && (
+              <div
+                className="meter-fill h-full rounded-full transition-[width] duration-700 ease-[var(--ease-out)]"
+                style={{ width: `${Math.max(pct, 3)}%` }}
+              />
+            )}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -194,6 +216,19 @@ export default function Dashboard() {
           )}
           {/* Only surface sync when something needs attention. */}
           {(app.sync === 'offline' || app.sync === 'error') && <SyncBadge state={app.sync} onClick={app.syncNow} />}
+          <button
+            aria-label={unread ? `Activity, ${unread} new notification${unread === 1 ? '' : 's'}` : 'Activity'}
+            title="Activity"
+            onClick={() => app.setScreen('activity')}
+            className="press relative rounded-full p-1.5 text-mut hover:bg-surface hover:text-txt"
+          >
+            <History size={16} />
+            {unread > 0 && (
+              <span className="anim-pop absolute -right-0.5 -top-0.5 grid h-[15px] min-w-[15px] place-items-center rounded-full bg-pop px-1 text-[9.5px] font-bold leading-none text-white shadow-[0_0_10px_rgba(157,123,250,.7)]">
+                {unread > 9 ? '9+' : unread}
+              </span>
+            )}
+          </button>
           <button
             aria-label="Settings"
             onClick={() => app.setScreen('settings')}

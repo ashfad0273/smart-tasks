@@ -22,7 +22,7 @@ export default defineConfig({
     description:
       'Capture tasks in a click, get reminders on time and stay in sync on every device. Works with AI agents like Claude.',
     minimum_chrome_version: '116',
-    permissions: ['storage', 'identity', 'alarms', 'notifications', 'contextMenus'],
+    permissions: ['storage', 'identity', 'alarms', 'notifications', 'contextMenus', 'offscreen'],
     action: { default_title: 'Smart Tasks' },
     commands: {
       _execute_action: {

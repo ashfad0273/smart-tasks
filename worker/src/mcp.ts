@@ -96,7 +96,7 @@ const list = async (ctx: Ctx, kind: 'task' | 'category') => (await ctx.hub.list(
 async function push(ctx: Ctx, ops: unknown[]): Promise<void> {
   // Same validation as the extension's sync endpoint.
   const clean: SyncOp[] = parseOps({ ops });
-  await ctx.hub.push(clean);
+  await ctx.hub.push(clean, 'agent');
 }
 
 async function findTask(ctx: Ctx, id: unknown): Promise<Rec> {
@@ -133,6 +133,8 @@ function view(t: Rec, cats: Map<string, string>, tz: string) {
     category: t.categoryId ? (cats.get(t.categoryId as string) ?? null) : null,
     ...(t.notes ? { notes: t.notes } : {}),
     ...(t.url ? { url: t.url } : {}),
+    added: typeof t.createdAt === 'number' ? fmtLocal(t.createdAt, tz) : null,
+    ...(typeof t.completedAt === 'number' ? { completed: fmtLocal(t.completedAt, tz) } : {}),
     ...(subs.length ? { subtasks: subs.map(s => `${s.done ? '[x]' : '[ ]'} ${s.title}`) } : {}),
   };
 }
@@ -219,6 +221,20 @@ const TOOLS = [
     title: 'List categories',
     description: 'List categories with how many pending tasks each has.',
     inputSchema: { type: 'object', properties: {} },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'list_activity',
+    title: 'Task history',
+    description:
+      'Recent history, newest first: tasks added, completed, reopened and deleted, and notifications sent. Each event says whether the user ("me") or an agent did it, and when.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'How many events (default 30, max 100).' },
+        type: { type: 'string', enum: ['added', 'completed', 'reopened', 'deleted', 'notice'], description: 'Only this kind of event.' },
+      },
+    },
     annotations: { readOnlyHint: true },
   },
   {
@@ -350,6 +366,20 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
           .sort((x, y) => (x.order as number) - (y.order as number))
           .map(c => ({ name: c.name, color: c.color, pending: tasks.filter(t => t.categoryId === c.id && t.completedAt == null).length })),
       };
+    }
+
+    case 'list_activity': {
+      const limit = Math.min(100, Math.max(1, Number(a.limit) || 30));
+      const type = typeof a.type === 'string' ? a.type : null;
+      const out: Array<Record<string, unknown>> = [];
+      let cursor = '';
+      for (let page = 0; page < 10 && out.length < limit; page++) {
+        const r = await ctx.hub.activity(cursor, 100);
+        for (const e of r.events) if (!type || e.type === type) out.push({ when: fmtLocal(e.at, ctx.tz), event: e.type, title: e.title, ...(e.detail ? { message: e.detail } : {}), by: e.by === 'agent' ? 'agent' : 'user', ...(e.taskId ? { taskId: e.taskId } : {}) });
+        if (!r.next) break;
+        cursor = r.next;
+      }
+      return { events: out.slice(0, limit) };
     }
 
     case 'notify': {

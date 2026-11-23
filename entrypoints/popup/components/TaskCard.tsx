@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Clock, ExternalLink, ListChecks, Pencil, Trash2 } from 'lucide-react';
-import { cx, formatDue, PRIORITY_META } from '../../../lib/utils';
+import { Check, CircleCheck, Clock, ExternalLink, ListChecks, Pencil, Trash2 } from 'lucide-react';
+import { cx, formatDue, formatStamp, PRIORITY_META } from '../../../lib/utils';
 import type { Task } from '../../../lib/types';
 import { useApp } from '../state/AppContext';
 import Burst from './Burst';
@@ -10,9 +10,9 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
   const cat = app.categoryById(task.categoryId);
   // Inside a category's own filter the chip says nothing new, so it folds away there.
   const showCat = !!cat && app.filter !== task.categoryId;
-  const hasMeta = showCat || !!task.dueAt || !!task.url;
-  const due = task.dueAt ? formatDue(task.dueAt) : null;
   const done = !!task.completedAt;
+  const hasMeta = showCat || !!task.dueAt || !!task.url || done;
+  const due = task.dueAt ? formatDue(task.dueAt) : null;
   const doneSubs = task.subtasks.filter(s => s.done).length;
   const [burst, setBurst] = useState(0);
   const [renaming, setRenaming] = useState(false);
@@ -149,6 +149,14 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
               <span className={cx('inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5', dueTone || 'bg-surface2 text-mut')}>
                 <Clock size={10} />
                 {due.overdue && !done ? `Overdue · ${due.label}` : due.label}
+              </span>
+            )}
+            {task.completedAt && (
+              <span
+                className="anim-pop inline-flex shrink-0 items-center gap-1 rounded-full bg-acc/10 px-2 py-0.5 text-acc/90"
+                title={`Added ${formatStamp(task.createdAt)} · Done ${formatStamp(task.completedAt)}`}
+              >
+                <CircleCheck size={10} /> Done {formatStamp(task.completedAt)}
               </span>
             )}
             {task.url && (

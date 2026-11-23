@@ -1,8 +1,8 @@
 import { defineBackground } from 'wxt/utils/define-background';
 import { signInWithGoogle } from '../lib/auth';
 import { storageGet, storageSet } from '../lib/ext';
-import { api } from '../lib/api';
-import { AGENT_NOTIFY_KEY, NOTICE_LINKS_KEY, noticesSeenKey, REGISTRY_KEY, REMINDERS_ENABLED_KEY, REMINDERS_KEY, REMINDERS_SENT_KEY, baseKey, outboxKey } from '../lib/keys';
+import { api, type InboxItem } from '../lib/api';
+import { AGENT_NOTIFY_KEY, AGENT_SOUND_KEY, inboxKey, NOTICE_LINKS_KEY, OPEN_SCREEN_KEY, noticesSeenKey, REGISTRY_KEY, REMINDERS_ENABLED_KEY, REMINDERS_KEY, REMINDERS_SENT_KEY, baseKey, outboxKey } from '../lib/keys';
 import { GRACE_MS, writeReminders, type Reminder } from '../lib/reminders';
 import { activeAccount, loadRegistry, mutate, newId, readView, sync } from '../lib/store';
 import { isSameDay } from '../lib/utils';
@@ -34,6 +34,16 @@ export default defineBackground(() => {
 
   /* ── badge + reminder snapshot ────────────────────────────────────── */
 
+  async function unreadNotices(): Promise<number> {
+    const reg = await loadRegistry();
+    let n = 0;
+    for (const a of reg.accounts) {
+      if (a.local) continue;
+      n += (await storageGet<InboxItem[]>(inboxKey(a.uid), [])).filter(i => !i.read).length;
+    }
+    return n;
+  }
+
   async function refreshDerived(): Promise<void> {
     const acc = await activeAccount();
     const tasks = acc ? Object.values((await readView(acc.uid)).tasks) : [];
@@ -41,8 +51,14 @@ export default defineBackground(() => {
     const now = Date.now();
     const due = tasks.filter(t => !t.completedAt && t.dueAt != null && (t.dueAt < now || isSameDay(t.dueAt, now))).length;
     const overdue = tasks.some(t => !t.completedAt && t.dueAt != null && t.dueAt < now);
-    await chrome.action.setBadgeText({ text: due > 0 ? String(Math.min(due, 99)) : '' });
-    await chrome.action.setBadgeBackgroundColor({ color: overdue ? '#ef4444' : '#22c55e' });
+    const unread = await unreadNotices();
+    // Unread agent notifications win the badge (purple); otherwise today's due count.
+    const count = unread > 0 ? unread : due;
+    await chrome.action.setBadgeText({ text: count > 0 ? String(Math.min(count, 99)) : '' });
+    await chrome.action.setBadgeBackgroundColor({ color: unread > 0 ? '#9d7bfa' : overdue ? '#ef4444' : '#22c55e' });
+    await chrome.action.setTitle({
+      title: unread > 0 ? `Smart Tasks: ${unread} unread notification${unread === 1 ? '' : 's'}` : 'Smart Tasks',
+    });
     if (chrome.action.setBadgeTextColor) await chrome.action.setBadgeTextColor({ color: '#ffffff' });
   }
 
@@ -87,6 +103,24 @@ export default defineBackground(() => {
 
   /* ── agent notifications ──────────────────────────────────────────── */
 
+  async function playChime(): Promise<void> {
+    if (!(await storageGet<boolean>(AGENT_SOUND_KEY, true)) || !chrome.offscreen) return;
+    try {
+      const open = await chrome.runtime.getContexts({ contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT] });
+      if (open.length) {
+        await chrome.runtime.sendMessage({ type: 'st-offscreen-chime' });
+      } else {
+        await chrome.offscreen.createDocument({
+          url: 'offscreen.html#chime',
+          reasons: [chrome.offscreen.Reason.AUDIO_PLAYBACK],
+          justification: 'Play a short sound when your AI agent sends a notification.',
+        });
+      }
+    } catch {
+      /* a sound is nice to have; the notification still shows */
+    }
+  }
+
   // One check at a time, so a WS nudge and the minute alarm can't show a notice twice.
   let noticeCheck: Promise<void> | null = null;
   function checkNotices(): Promise<void> {
@@ -105,22 +139,29 @@ export default defineBackground(() => {
           }
           // First check on this device: only show what was sent in the last few minutes.
           const fresh = seen == null ? r.notices.filter(n => n.createdAt > Date.now() - 10 * 60_000) : r.notices;
-          if (allowed && fresh.length) {
-            const links = await storageGet<Record<string, string>>(NOTICE_LINKS_KEY, {});
-            for (const n of fresh) {
-              const id = `st-agent:${a.uid}:${n.id}`;
-              chrome.notifications.create(id, {
-                type: 'basic',
-                iconUrl: chrome.runtime.getURL('icon/128.png'),
-                title: n.title,
-                message: n.message,
-                contextMessage: reg.accounts.filter(x => !x.local).length > 1 ? `From your AI agent · ${a.email}` : 'From your AI agent',
-                priority: 2,
-              });
-              if (n.url) links[id] = n.url;
+          if (fresh.length) {
+            const inbox = await storageGet<InboxItem[]>(inboxKey(a.uid), []);
+            const have = new Set(inbox.map(i => i.id));
+            const add = fresh.filter(n => !have.has(n.id));
+            await storageSet(inboxKey(a.uid), [...inbox, ...add.map(n => ({ ...n, read: !allowed }))].slice(-100));
+            if (allowed && add.length) {
+              const links = await storageGet<Record<string, string>>(NOTICE_LINKS_KEY, {});
+              for (const n of add) {
+                const id = `st-agent:${a.uid}:${n.id}`;
+                chrome.notifications.create(id, {
+                  type: 'basic',
+                  iconUrl: chrome.runtime.getURL('icon/128.png'),
+                  title: n.title,
+                  message: n.message,
+                  contextMessage: reg.accounts.filter(x => !x.local).length > 1 ? `From your AI agent · ${a.email}` : 'From your AI agent',
+                  priority: 2,
+                  silent: true, // our own chime plays instead of the system sound
+                });
+                if (n.url) links[id] = n.url;
+              }
+              await storageSet(NOTICE_LINKS_KEY, Object.fromEntries(Object.entries(links).slice(-50)));
+              await playChime();
             }
-            const keep = Object.entries(links).slice(-50);
-            await storageSet(NOTICE_LINKS_KEY, Object.fromEntries(keep));
           }
           const last = Math.max(seen ?? 0, r.latest, ...r.notices.map(n => n.id));
           if (last !== seen) await storageSet(noticesSeenKey(a.uid), last);
@@ -202,7 +243,7 @@ export default defineBackground(() => {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     const keys = Object.keys(changes);
-    if (keys.some(k => k === REGISTRY_KEY || k.startsWith(baseKey('')) || k.startsWith(outboxKey('')))) {
+    if (keys.some(k => k === REGISTRY_KEY || k.startsWith(baseKey('')) || k.startsWith(outboxKey('')) || k.startsWith(inboxKey('')))) {
       void refreshDerived();
     }
     if (REMINDERS_KEY in changes || REMINDERS_ENABLED_KEY in changes) void checkReminders();
@@ -265,11 +306,17 @@ export default defineBackground(() => {
     void chrome.notifications.clear(id);
     void (async () => {
       if (id.startsWith('st-agent:')) {
+        const [, uid, nid] = id.split(':');
+        const inbox = await storageGet<InboxItem[]>(inboxKey(uid), []);
+        if (inbox.some(i => i.id === Number(nid) && !i.read)) {
+          await storageSet(inboxKey(uid), inbox.map(i => (i.id === Number(nid) ? { ...i, read: true } : i)));
+        }
         const links = await storageGet<Record<string, string>>(NOTICE_LINKS_KEY, {});
         if (links[id]) {
           await chrome.tabs.create({ url: links[id] });
           return;
         }
+        await storageSet(OPEN_SCREEN_KEY, 'activity');
       }
       try {
         await chrome.action.openPopup();

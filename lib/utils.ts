@@ -52,6 +52,18 @@ export function formatTime(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+/** "Today 3:50 PM", "Yesterday 9:10 AM", "Mon 4:00 PM" (this week), else "Nov 21, 3:50 PM". */
+export function formatStamp(ms: number): string {
+  const now = Date.now();
+  const time = formatTime(ms);
+  if (isSameDay(ms, now)) return `Today ${time}`;
+  if (isSameDay(ms, addDays(now, -1))) return `Yesterday ${time}`;
+  const d = new Date(ms);
+  if (now - ms < 6 * 86_400_000 && ms < now) return `${d.toLocaleDateString([], { weekday: 'short' })} ${time}`;
+  const sameYear = d.getFullYear() === new Date(now).getFullYear();
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) })}, ${time}`;
+}
+
 export function formatDue(ms: number): { label: string; overdue: boolean } {
   const now = Date.now();
   const diffDays = Math.round((startOfDay(ms).getTime() - startOfDay(now).getTime()) / 86_400_000);

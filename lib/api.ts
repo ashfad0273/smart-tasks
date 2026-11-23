@@ -74,6 +74,21 @@ export interface AgentNotice {
   createdAt: number;
 }
 
+export interface InboxItem extends AgentNotice {
+  read: boolean;
+}
+
+export type ActivityType = 'added' | 'completed' | 'reopened' | 'deleted' | 'notice';
+export interface ActivityEvent {
+  id: number;
+  at: number;
+  type: ActivityType;
+  taskId: string | null;
+  title: string;
+  detail: string | null;
+  by: 'me' | 'agent';
+}
+
 const post = (body: unknown) => ({ method: 'POST', body: JSON.stringify(body) });
 
 export const api = {
@@ -99,5 +114,7 @@ export const api = {
   signOutDevice: (token: string, id: string) => call<{ ok: true }>(`/v1/sessions/${encodeURIComponent(id)}`, { method: 'DELETE', token }),
   signOutOthers: (token: string) => call<{ ok: true; signedOut: number }>('/v1/sessions?others=1', { method: 'DELETE', token }),
   notices: (token: string, after: number) => call<{ latest: number; notices: AgentNotice[] }>(`/v1/notices?after=${after}`, { token }),
+  activity: (token: string, cursor = '', limit = 50) =>
+    call<{ events: ActivityEvent[]; next: string | null }>(`/v1/activity?cursor=${encodeURIComponent(cursor)}&limit=${limit}`, { token }),
   wsUrl: (token: string) => `${API_URL.replace(/^http/, 'ws')}/v1/ws?token=${encodeURIComponent(token)}`,
 };
