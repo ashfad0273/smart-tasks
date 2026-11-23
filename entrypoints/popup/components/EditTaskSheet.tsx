@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ExternalLink, GripVertical, Plus, Trash2, X } from 'lucide-react';
 import {
   addDays,
@@ -13,7 +13,7 @@ import {
   toTimeInput,
   uid4,
 } from '../../../lib/utils';
-import type { Priority, Subtask } from '../../../lib/types';
+import type { Priority, Subtask, Task } from '../../../lib/types';
 import { useApp } from '../state/AppContext';
 import Sheet from './Sheet';
 
@@ -46,39 +46,41 @@ export default function EditTaskSheet() {
   const listRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ from: number; y: number } | null>(null);
 
-  const dirty =
-    !!task &&
-    (title.trim() !== task.title ||
-      (notes.trim() || null) !== (task.notes || null) ||
-      categoryId !== task.categoryId ||
-      priority !== task.priority ||
-      dueAt !== task.dueAt ||
-      JSON.stringify(subtasks) !== JSON.stringify(task.subtasks));
+  // Autosave: only fields that differ from the stored task are written, shortly
+  // after the user stops typing, and immediately when the sheet closes.
+  const buildPatch = useCallback(() => {
+    if (!task) return null;
+    const p: Partial<Task> = {};
+    const t = title.trim();
+    if (t && t !== task.title) p.title = t;
+    if ((notes.trim() || null) !== (task.notes || null)) p.notes = notes.trim() || null;
+    if (categoryId !== task.categoryId) p.categoryId = categoryId;
+    if (priority !== task.priority) p.priority = priority;
+    if (dueAt !== task.dueAt) p.dueAt = dueAt;
+    if (JSON.stringify(subtasks) !== JSON.stringify(task.subtasks)) p.subtasks = subtasks;
+    return Object.keys(p).length ? p : null;
+  }, [task, title, notes, categoryId, priority, dueAt, subtasks]);
 
-  const save = useCallback(async () => {
-    if (!task) return;
-    await app.updateTask(task.id, {
-      title: title.trim() || task.title,
-      notes: notes.trim() || null,
-      categoryId,
-      priority,
-      dueAt,
-      subtasks,
-    });
-    app.closeEdit();
-  }, [app, task, title, notes, categoryId, priority, dueAt, subtasks]);
+  const flush = useCallback(async () => {
+    const p = buildPatch();
+    if (task && p) await app.updateTask(task.id, p);
+  }, [app, task, buildPatch]);
 
-  // Closing with unsaved edits asks first instead of silently discarding them.
+  const flushRef = useRef(flush);
+  flushRef.current = flush;
+  const pending = !!buildPatch();
+  useEffect(() => {
+    if (!pending) return;
+    const t = setTimeout(() => void flushRef.current(), 350);
+    return () => clearTimeout(t);
+  }, [pending, title, notes, categoryId, priority, dueAt, subtasks]);
+  // Save whatever is left if the sheet unmounts (popup closed, task opened elsewhere).
+  useEffect(() => () => void flushRef.current(), []);
+
   const requestClose = useCallback(async () => {
-    if (!dirty) return app.closeEdit();
-    const ok = await app.confirm({
-      title: 'Save your changes?',
-      message: 'You edited this task. Keep the changes?',
-      confirmText: 'Save',
-    });
-    if (ok) await save();
-    else app.closeEdit();
-  }, [app, dirty, save]);
+    await flush();
+    app.closeEdit();
+  }, [app, flush]);
 
   if (!task) return null;
 
@@ -157,7 +159,7 @@ export default function EditTaskSheet() {
           onKeyDown={e => {
             if (e.key === 'Enter') {
               e.preventDefault();
-              void save();
+              void requestClose();
             }
           }}
           placeholder="Task title"
@@ -399,8 +401,8 @@ export default function EditTaskSheet() {
           >
             <Trash2 size={13} /> Delete
           </button>
-          <button onClick={() => void save()} className="press btn-acc flex-1 rounded-full py-2.5 text-sm font-semibold">
-            {dirty ? 'Save changes' : 'Done'}
+          <button onClick={() => void requestClose()} className="press btn-acc flex-1 rounded-full py-2.5 text-sm font-semibold">
+            Done
           </button>
         </div>
       </div>
