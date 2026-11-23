@@ -98,8 +98,8 @@ const targetDirs = [
 ].filter(Boolean);
 const deskOut = join(out, 'desktop');
 const platforms = {};
-const ctas = [];
-const metas = [];
+// What the page offers: href + size per platform, or null when not built yet.
+const dl = { win: null, mac: null, ext: { href: `/${zip}`, size } };
 const mbOf = p => (statSync(p).size / 1024 / 1024).toFixed(1);
 const signature = p => readFileSync(`${p}.sig`, 'utf8').trim();
 
@@ -111,8 +111,7 @@ if (setupSrc) {
   copyFileSync(setupSrc, join(deskOut, exe));
   copyFileSync(setupSrc, join(deskOut, 'smart-tasks-setup-latest.exe'));
   platforms['windows-x86_64'] = { signature: signature(setupSrc), url: `${SITE}/desktop/${exe}` };
-  ctas.push(`<a class="ghost" href="/desktop/${exe}" download>Windows app</a>`);
-  metas.push(`Windows app ${mbOf(setupSrc)} MB`);
+  dl.win = { href: `/desktop/${exe}`, size: `${mbOf(setupSrc)} MB` };
 } else {
   console.warn(`No signed Windows installer for ${version} (run \`npm run desktop:build\`).`);
 }
@@ -135,8 +134,7 @@ if (dmgName && tarName) {
   const mac = { signature: signature(join(macDir, tarName)), url: `${SITE}/desktop/${tar}` };
   platforms['darwin-aarch64'] = mac;
   platforms['darwin-x86_64'] = mac;
-  ctas.push(`<a class="ghost" href="/desktop/${dmg}" download>Mac app</a>`);
-  metas.push(`Mac app ${mbOf(join(macDir, dmgName))} MB`);
+  dl.mac = { href: `/desktop/${dmg}`, size: `${mbOf(join(macDir, dmgName))} MB` };
 } else {
   console.warn(`No macOS ${version} build in desktop/release/macos (run \`npm run desktop:mac:fetch\` after the GitHub build).`);
 }
@@ -157,12 +155,27 @@ if (Object.keys(platforms).length) {
     ),
   );
 }
-const desktopCta = ctas.join('\n');
-const desktopMeta = metas.map(m => ` · ${m}`).join('');
+/* ── download cards (one per platform; missing builds show as "coming soon") ── */
+const PLAT = {
+  win: { name: 'Windows', sub: 'Windows 10 and 11, 64-bit', icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.4 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.4z"/></svg>' },
+  mac: { name: 'macOS', sub: 'Apple silicon and Intel, macOS 13+', icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.2-1.7-3-1.9-3.6-2-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8 1.6 0 2 .8 3.4.8 1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9 0 0-2.8-1.1-2.9-4.3zM13.9 5.3c.7-.9 1.2-2 1-3.3-1 0-2.2.7-3 1.5-.6.7-1.2 1.9-1 3.1 1.1.1 2.3-.6 3-1.3z"/></svg>' },
+  ext: { name: 'Browser extension', sub: 'Chrome, Comet, Brave, Edge, Arc', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M12 8.5h8.5M8.97 13.75 4.7 6.4M15.03 13.75 10.8 21"/></svg>' },
+};
+const dlCards = ['win', 'mac', 'ext']
+  .map(k => {
+    const p = PLAT[k];
+    const d = dl[k];
+    const head = `<span class="dl-ico">${p.icon}</span><span class="dl-txt"><b>${p.name}</b><small>${p.sub}</small></span>`;
+    return d
+      ? `<a class="dl-card reveal" data-plat="${k}" href="${d.href}" download>${head}<span class="dl-go"><span>${d.size}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M6.5 10.5 12 16l5.5-5.5M5 20h14"/></svg></span></a>`
+      : `<div class="dl-card soon reveal" data-plat="${k}">${head}<span class="dl-go"><span>Coming soon</span></span></div>`;
+  })
+  .join('\n');
+const dlJson = JSON.stringify(Object.fromEntries(Object.entries(dl).map(([k, v]) => [k, v && { ...v, name: PLAT[k].name }])));
 
 const html = readFileSync(join(root, 'site/template.html'), 'utf8')
-  .replaceAll('{{DESKTOP_CTA}}', desktopCta)
-  .replaceAll('{{DESKTOP_META}}', desktopMeta)
+  .replaceAll('{{DL_CARDS}}', dlCards)
+  .replaceAll('{{DL_JSON}}', dlJson.replace(/</g, '\\u003c'))
   .replaceAll('{{VERSION}}', esc(version))
   .replaceAll('{{SIZE}}', size)
   .replaceAll('{{ZIP}}', zip)

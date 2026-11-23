@@ -3,194 +3,721 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Smart Tasks: download the extension</title>
-    <meta name="description" content="Download Smart Tasks, a to-do list with reminders that syncs across your devices and works with AI agents. Version {{VERSION}}." />
+    <title>Smart Tasks: download for Windows, Mac and your browser</title>
+    <meta name="description" content="Download Smart Tasks, a to-do list with reminders that syncs across your devices and works with AI agents. Apps for Windows and Mac, and a browser extension. Version {{VERSION}}." />
     <link rel="icon" type="image/png" href="/icon-128.png" />
-    <meta name="theme-color" content="#10191c" />
+    <meta name="theme-color" content="#0c1417" />
     <style>
       :root {
-        --bg: #10191c;
-        --surface: #151f22;
-        --surface2: #1b282c;
-        --line: #24343a;
-        --txt: #ffffff;
+        --bg: #0c1417;
+        --surface: #131d21;
+        --surface2: #192629;
+        --line: #22333a;
+        --line2: #2e4750;
+        --txt: #f4fbfb;
         --mut: #8a9b9f;
         --acc: #3fd1c5;
         --acc2: #6ff0dc;
         --pop: #9d7bfa;
+        --warn: #facc15;
         --ease: cubic-bezier(0.22, 1, 0.36, 1);
+        --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        interpolate-size: allow-keywords;
       }
       * { box-sizing: border-box; }
-      html { color-scheme: dark; scroll-behavior: smooth; }
+      html { color-scheme: dark; scroll-behavior: smooth; scroll-padding-top: 80px; }
       body {
         margin: 0;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
         color: var(--txt);
-        background: radial-gradient(1200px 600px at 10% -10%, #15343a 0%, transparent 60%),
-          radial-gradient(900px 500px at 100% 0%, #1d1838 0%, transparent 55%), var(--bg);
-        background-attachment: fixed;
+        background: var(--bg);
         -webkit-font-smoothing: antialiased;
         line-height: 1.55;
+        overflow-x: hidden;
       }
       a { color: inherit; }
-      .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+      button { font: inherit; color: inherit; }
+      :focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; border-radius: 8px; }
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 
-      nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
-      .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -0.01em; text-decoration: none; }
-      .brand svg { width: 30px; height: 30px; }
-      .links { display: flex; gap: 22px; font-size: 14px; color: var(--mut); }
-      .links a { text-decoration: none; transition: color 0.2s var(--ease); }
-      .links a:hover { color: var(--txt); }
+      /* ── background ── */
+      .aurora { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+      .aurora i { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.55; animation: drift 22s ease-in-out infinite alternate; }
+      .aurora i:nth-child(1) { width: 620px; height: 620px; left: -180px; top: -220px; background: #14454a; }
+      .aurora i:nth-child(2) { width: 520px; height: 520px; right: -160px; top: -120px; background: #231c4a; animation-duration: 28s; }
+      .aurora i:nth-child(3) { width: 420px; height: 420px; left: 40%; top: 55vh; background: #0f3338; opacity: 0.35; animation-duration: 34s; }
+      .aurora::after { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px); background-size: 48px 48px; mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%); }
+      @keyframes drift { to { transform: translate(60px, 40px) scale(1.08); } }
 
-      .hero { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 48px; align-items: center; padding: 56px 0 72px; }
-      .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--acc); background: rgba(63, 209, 197, 0.1); border: 1px solid rgba(63, 209, 197, 0.2); padding: 5px 12px; border-radius: 999px; text-decoration: none; }
-      .eyebrow .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--acc); box-shadow: 0 0 10px var(--acc); }
-      h1 { font-size: clamp(36px, 5.4vw, 54px); line-height: 1.05; letter-spacing: -0.035em; margin: 20px 0 16px; font-weight: 750; }
-      h1 em { font-style: normal; background: linear-gradient(90deg, var(--acc), var(--acc2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-      .lead { font-size: 17px; color: var(--mut); max-width: 480px; margin: 0 0 30px; }
-      .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+      /* ── nav ── */
+      nav { position: sticky; top: 0; z-index: 20; transition: background 0.3s var(--ease), border-color 0.3s var(--ease), backdrop-filter 0.3s; border-bottom: 1px solid transparent; }
+      nav.scrolled { background: rgba(12, 20, 23, 0.72); backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%); border-color: rgba(255,255,255,.06); }
+      nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 68px; }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 680; letter-spacing: -0.01em; text-decoration: none; }
+      .brand svg { width: 30px; height: 30px; transition: transform 0.5s var(--spring); }
+      .brand:hover svg { transform: rotate(-8deg) scale(1.08); }
+      .links { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--mut); }
+      .links a { text-decoration: none; padding: 7px 12px; border-radius: 999px; transition: color 0.2s, background 0.2s; }
+      .links a:hover { color: var(--txt); background: rgba(255,255,255,.05); }
+      .links a.pill { color: #062022; background: var(--acc); font-weight: 650; }
+      .links a.pill:hover { background: var(--acc2); color: #062022; }
+
+      /* ── hero ── */
+      .hero { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; align-items: center; padding: 56px 0 88px; }
+      .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--acc); background: rgba(63, 209, 197, 0.08); border: 1px solid rgba(63, 209, 197, 0.22); padding: 5px 12px 5px 8px; border-radius: 999px; text-decoration: none; transition: background 0.2s, border-color 0.2s; }
+      .eyebrow:hover { background: rgba(63, 209, 197, 0.14); border-color: rgba(63, 209, 197, 0.4); }
+      .eyebrow .new { background: var(--acc); color: #062022; font-size: 10.5px; font-weight: 800; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 999px; }
+      .eyebrow svg { width: 13px; height: 13px; transition: transform 0.25s var(--ease); }
+      .eyebrow:hover svg { transform: translateX(3px); }
+      h1 { font-size: clamp(38px, 5.6vw, 62px); line-height: 1.02; letter-spacing: -0.04em; margin: 22px 0 18px; font-weight: 780; }
+      h1 em { font-style: normal; background: linear-gradient(90deg, var(--acc2), var(--acc) 40%, var(--pop) 80%, var(--acc2)); background-size: 200% auto; -webkit-background-clip: text; background-clip: text; color: transparent; animation: sheen 6s linear infinite; }
+      @keyframes sheen { to { background-position: 200% center; } }
+      .lead { font-size: 17.5px; color: var(--mut); max-width: 500px; margin: 0 0 32px; }
+      .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
       .btn {
-        display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; border-radius: 999px;
-        font-weight: 650; font-size: 15px; text-decoration: none; color: #062022;
+        position: relative; display: inline-flex; align-items: center; gap: 12px; padding: 12px 24px 12px 18px; border-radius: 16px; border: 0; cursor: pointer;
+        text-decoration: none; color: #062022; overflow: hidden; isolation: isolate;
         background: linear-gradient(135deg, #6ff0dc 0%, #3fd1c5 50%, #2794bd 100%);
-        box-shadow: 0 10px 30px -10px rgba(63, 209, 197, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.35);
-        transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
+        box-shadow: 0 14px 34px -12px rgba(63, 209, 197, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        transition: transform 0.3s var(--spring), box-shadow 0.3s var(--ease);
       }
-      .btn:hover { transform: translateY(-2px); box-shadow: 0 16px 38px -12px rgba(63, 209, 197, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.35); }
-      .btn:active { transform: translateY(0) scale(0.98); }
-      .btn svg { width: 18px; height: 18px; }
-      .ghost { padding: 13px 20px; border-radius: 999px; border: 1px solid var(--line); color: var(--mut); text-decoration: none; font-size: 14.5px; font-weight: 550; transition: color 0.2s var(--ease), border-color 0.2s var(--ease); }
-      .ghost:hover { color: var(--txt); border-color: #35505a; }
-      .meta { margin-top: 16px; font-size: 13px; color: var(--mut); }
-      .meta b { color: var(--txt); font-weight: 600; }
+      .btn::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.45) 50%, transparent 70%); transform: translateX(-120%); transition: transform 0.7s var(--ease); }
+      .btn:hover { transform: translateY(-2px); box-shadow: 0 20px 44px -14px rgba(63, 209, 197, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
+      .btn:hover::after { transform: translateX(120%); }
+      .btn:active { transform: translateY(0) scale(0.97); }
+      .btn .os { width: 26px; height: 26px; display: grid; place-items: center; }
+      .btn .os svg { width: 22px; height: 22px; }
+      .btn span.l { display: flex; flex-direction: column; line-height: 1.2; text-align: left; }
+      .btn b { font-size: 15.5px; font-weight: 720; }
+      .btn small { font-size: 12px; font-weight: 600; opacity: 0.7; }
+      .ghost { display: inline-flex; align-items: center; gap: 8px; padding: 14px 18px; border-radius: 16px; border: 1px solid var(--line); color: var(--mut); text-decoration: none; font-size: 14.5px; font-weight: 560; transition: color 0.2s, border-color 0.2s, background 0.2s; }
+      .ghost:hover { color: var(--txt); border-color: var(--line2); background: rgba(255,255,255,.03); }
+      .meta { margin-top: 18px; font-size: 13px; color: var(--mut); display: flex; flex-wrap: wrap; gap: 6px 16px; }
+      .meta span { display: inline-flex; align-items: center; gap: 6px; }
+      .meta svg { width: 14px; height: 14px; color: var(--acc); }
 
-      .mark { position: relative; display: grid; place-items: center; }
-      .mark svg { width: min(300px, 70vw); height: auto; filter: drop-shadow(0 30px 60px rgba(63, 209, 197, 0.3)); animation: bob 5s ease-in-out infinite; }
-      .mark::before { content: ''; position: absolute; width: 70%; aspect-ratio: 1; border-radius: 999px; background: radial-gradient(circle, rgba(63, 209, 197, 0.25), transparent 65%); filter: blur(20px); }
-      @keyframes bob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-10px) rotate(1deg); } }
+      /* ── live demo ── */
+      .stage { position: relative; perspective: 1200px; display: grid; place-items: center; }
+      .stage::before { content: ''; position: absolute; width: 80%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, rgba(63, 209, 197, 0.22), transparent 65%); filter: blur(30px); }
+      .device {
+        position: relative; width: min(100%, 390px); border-radius: 22px; overflow: hidden;
+        background: linear-gradient(180deg, #13201f, #0e1719); border: 1px solid #27393f;
+        box-shadow: 0 40px 80px -30px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.03) inset, 0 30px 70px -40px rgba(63,209,197,.45);
+        transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform 0.6s var(--ease); transform-style: preserve-3d;
+      }
+      .bar { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid rgba(255,255,255,.05); font-size: 12px; color: var(--mut); }
+      .bar svg { width: 16px; height: 16px; }
+      .bar .ctl { margin-left: auto; display: flex; gap: 14px; opacity: 0.6; }
+      .bar .ctl i { width: 9px; height: 9px; border: 1.5px solid currentColor; border-radius: 2px; }
+      .bar .ctl i:first-child { height: 0; border-width: 1px 0 0; align-self: center; }
+      .app { padding: 16px; min-height: 330px; }
+      .app h4 { margin: 0 0 2px; font-size: 18px; letter-spacing: -0.02em; }
+      .app .day { font-size: 12px; color: var(--mut); margin-bottom: 12px; }
+      .qa { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 13px; background: rgba(255,255,255,.04); border: 1px solid #26383e; font-size: 13.5px; transition: border-color 0.3s, box-shadow 0.3s; min-height: 42px; }
+      .qa.focus { border-color: rgba(63,209,197,.55); box-shadow: 0 0 0 4px rgba(63,209,197,.1); }
+      .qa .plus { width: 20px; height: 20px; border-radius: 7px; display: grid; place-items: center; background: rgba(63,209,197,.15); color: var(--acc); flex: none; font-weight: 700; }
+      .qa .ph { color: #5c6f74; }
+      .qa .tok { color: var(--acc2); }
+      .qa .tok.hi { color: #fca5a5; }
+      .qa .tok.cat { color: #c4b5fd; }
+      .caret { display: inline-block; width: 1.5px; height: 1.05em; background: var(--acc); vertical-align: -2px; margin-left: 1px; animation: blink 1s steps(1) infinite; }
+      @keyframes blink { 50% { opacity: 0; } }
+      .tasks { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 7px; }
+      .task { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 13px; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.05); font-size: 13.5px; transition: opacity 0.4s, transform 0.4s var(--ease), background 0.3s; }
+      .task.enter { animation: pop-in 0.55s var(--spring) both; }
+      @keyframes pop-in { from { opacity: 0; transform: translateY(-10px) scale(0.96); } }
+      .task .tick { position: relative; width: 20px; height: 20px; flex: none; border-radius: 50%; border: 1.8px solid #4b6168; cursor: pointer; padding: 0; background: none; transition: background 0.3s var(--ease), border-color 0.3s; }
+      .task .tick svg { position: absolute; inset: 2px; width: 13px; height: 13px; color: #062022; stroke-dasharray: 20; stroke-dashoffset: 20; transition: stroke-dashoffset 0.35s 0.08s var(--ease); }
+      .task.done .tick { background: var(--acc); border-color: var(--acc); }
+      .task.done .tick svg { stroke-dashoffset: 0; }
+      .task .t { flex: 0 1 auto; margin-right: auto; min-width: 0; position: relative; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.3s; }
+      .task .t::after { content: ''; position: absolute; left: 0; top: 52%; height: 1.5px; width: 100%; background: var(--mut); transform: scaleX(0); transform-origin: left; transition: transform 0.4s var(--ease); }
+      .task.done .t { color: var(--mut); }
+      .task.done .t::after { transform: scaleX(1); }
+      .chip { font-size: 10.5px; font-weight: 650; padding: 2px 7px; border-radius: 999px; background: rgba(63,209,197,.1); color: var(--acc2); white-space: nowrap; flex: none; }
+      .chip.hi { background: rgba(248,113,113,.12); color: #fca5a5; }
+      .chip.cat { background: rgba(157,123,250,.13); color: #c4b5fd; }
+      .chip.enter { animation: chip 0.45s var(--spring) both; }
+      @keyframes chip { from { opacity: 0; transform: scale(0.5); } }
+      .notif {
+        position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; gap: 11px; align-items: flex-start;
+        padding: 12px; border-radius: 15px; background: rgba(30, 44, 48, 0.94); border: 1px solid #34505a; backdrop-filter: blur(10px);
+        box-shadow: 0 20px 40px -14px rgba(0,0,0,.7); transform: translateY(130%); opacity: 0; transition: transform 0.55s var(--spring), opacity 0.3s;
+      }
+      .notif.show { transform: none; opacity: 1; }
+      .notif .ni { width: 30px; height: 30px; border-radius: 9px; flex: none; display: grid; place-items: center; background: rgba(63,209,197,.15); color: var(--acc); }
+      .notif .ni svg { width: 16px; height: 16px; transform-origin: top center; }
+      .notif.show .ni svg { animation: ring 0.9s 0.3s ease-in-out; }
+      @keyframes ring { 0%,100% { transform: rotate(0); } 20% { transform: rotate(16deg); } 40% { transform: rotate(-14deg); } 60% { transform: rotate(9deg); } 80% { transform: rotate(-5deg); } }
+      .notif b { font-size: 13px; display: block; }
+      .notif small { color: var(--mut); font-size: 12px; }
+      .notif .acts { display: flex; gap: 6px; margin-top: 8px; }
+      .notif .acts span { font-size: 11.5px; font-weight: 650; padding: 4px 10px; border-radius: 8px; background: rgba(255,255,255,.06); transition: background 0.2s, transform 0.2s; }
+      .notif .acts span.press { background: var(--acc); color: #062022; transform: scale(0.94); }
+      .float-kbd { position: absolute; right: -14px; top: 18%; display: flex; gap: 5px; padding: 8px 10px; border-radius: 13px; background: rgba(25,38,41,.92); border: 1px solid #2c444c; box-shadow: 0 16px 30px -14px rgba(0,0,0,.7); animation: bob 6s ease-in-out infinite; z-index: 2; }
+      .float-agent { position: absolute; left: -22px; bottom: -18px; display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 8px; border-radius: 13px; background: rgba(25,38,41,.92); border: 1px solid #3a3160; box-shadow: 0 16px 30px -14px rgba(0,0,0,.7); font-size: 12px; animation: bob 7s 1s ease-in-out infinite; z-index: 2; }
+      .float-agent i { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; background: rgba(157,123,250,.2); color: var(--pop); font-style: normal; }
+      .float-agent i svg { width: 13px; height: 13px; }
+      @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+      kbd { font-family: inherit; font-size: 11.5px; font-weight: 650; min-width: 24px; padding: 3px 7px; text-align: center; border-radius: 7px; background: #0f1a1c; border: 1px solid #2f474f; border-bottom-width: 2.5px; color: #cfe; transition: background 0.15s, color 0.15s, transform 0.15s; }
+      kbd.on { background: var(--acc); color: #062022; border-color: #2a9f96; transform: translateY(1px); }
 
-      section { padding: 56px 0; border-top: 1px solid rgba(255, 255, 255, 0.05); }
-      h2 { font-size: 26px; letter-spacing: -0.02em; margin: 0 0 8px; }
-      .sub { color: var(--mut); margin: 0 0 28px; font-size: 15px; }
+      /* ── sections ── */
+      section { padding: 80px 0; }
+      .kicker { font-size: 12px; font-weight: 750; letter-spacing: 0.1em; text-transform: uppercase; color: var(--acc); margin-bottom: 10px; }
+      h2 { font-size: clamp(26px, 3.4vw, 36px); line-height: 1.1; letter-spacing: -0.03em; margin: 0 0 10px; }
+      .sub { color: var(--mut); margin: 0 0 34px; font-size: 16px; max-width: 560px; }
 
+      /* download cards */
+      .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+      .dl-card { position: relative; display: flex; flex-direction: column; gap: 18px; padding: 20px; border-radius: 20px; text-decoration: none; background: var(--surface); border: 1px solid var(--line); overflow: hidden; transition: transform 0.35s var(--spring), border-color 0.3s, box-shadow 0.3s; }
+      .dl-card::before { content: ''; position: absolute; inset: 0; background: radial-gradient(360px circle at var(--x, 50%) var(--y, 0%), rgba(63,209,197,.12), transparent 45%); opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+      .dl-card:hover::before { opacity: 1; }
+      a.dl-card:hover { transform: translateY(-4px); border-color: rgba(63,209,197,.45); box-shadow: 0 24px 40px -24px rgba(63,209,197,.45); }
+      a.dl-card:active { transform: translateY(-1px) scale(0.985); }
+      .dl-card.mine { border-color: rgba(63,209,197,.5); }
+      .dl-card.mine::after { content: 'For this computer'; position: absolute; top: 16px; right: 16px; font-size: 10.5px; font-weight: 750; letter-spacing: 0.04em; color: var(--acc); background: rgba(63,209,197,.1); border: 1px solid rgba(63,209,197,.25); padding: 2px 8px; border-radius: 999px; }
+      .dl-ico { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: linear-gradient(135deg, rgba(63,209,197,.18), rgba(63,209,197,.05)); border: 1px solid rgba(63,209,197,.22); color: var(--acc2); }
+      .dl-ico svg { width: 22px; height: 22px; }
+      .dl-txt { display: flex; flex-direction: column; }
+      .dl-txt b { font-size: 17px; letter-spacing: -0.01em; }
+      .dl-txt small { color: var(--mut); font-size: 13px; }
+      .dl-go { margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.06); font-size: 13px; color: var(--mut); }
+      .dl-go svg { width: 34px; height: 34px; padding: 8px; border-radius: 11px; background: var(--acc); color: #062022; transition: transform 0.35s var(--spring); }
+      a.dl-card:hover .dl-go svg { transform: translateY(2px) scale(1.08); }
+      .dl-card.soon { opacity: 0.6; }
+      .dl-card.soon .dl-ico { filter: grayscale(1); }
+
+      /* features */
       .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-      .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px; transition: transform 0.3s var(--ease), border-color 0.3s var(--ease); }
-      .card:hover { transform: translateY(-3px); border-color: #31474f; }
-      .card h3 { font-size: 15px; margin: 10px 0 4px; }
-      .card p { margin: 0; color: var(--mut); font-size: 13.5px; }
-      .ico { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: rgba(63, 209, 197, 0.1); border: 1px solid rgba(63, 209, 197, 0.2); color: var(--acc); }
+      .card { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 22px; overflow: hidden; transition: transform 0.35s var(--spring), border-color 0.3s; }
+      .card::before { content: ''; position: absolute; inset: 0; background: radial-gradient(300px circle at var(--x, 50%) var(--y, 0%), rgba(111,240,220,.09), transparent 50%); opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+      .card:hover { transform: translateY(-3px); border-color: var(--line2); }
+      .card:hover::before { opacity: 1; }
+      .card h3 { font-size: 15.5px; margin: 14px 0 5px; letter-spacing: -0.01em; }
+      .card p { margin: 0; color: var(--mut); font-size: 14px; }
+      .ico { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: rgba(63, 209, 197, 0.1); border: 1px solid rgba(63, 209, 197, 0.2); color: var(--acc); transition: transform 0.4s var(--spring); }
+      .card:hover .ico { transform: rotate(-8deg) scale(1.1); }
       .ico.pop { background: rgba(157, 123, 250, 0.12); border-color: rgba(157, 123, 250, 0.25); color: var(--pop); }
-      .ico svg { width: 17px; height: 17px; }
+      .ico svg { width: 18px; height: 18px; }
 
-      ol.steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; counter-reset: s; }
-      ol.steps li { counter-increment: s; display: flex; gap: 14px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
-      ol.steps li::before { content: counter(s); flex: none; width: 26px; height: 26px; border-radius: 999px; display: grid; place-items: center; font-size: 13px; font-weight: 700; color: #062022; background: linear-gradient(135deg, #6ff0dc, #3fd1c5); }
-      ol.steps b { font-weight: 600; }
-      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.88em; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.06); padding: 1px 6px; border-radius: 6px; }
-      .note { margin-top: 14px; padding: 14px 16px; border-radius: 14px; background: rgba(157, 123, 250, 0.07); border: 1px solid rgba(157, 123, 250, 0.2); color: #cdbfff; font-size: 14px; }
+      /* install tabs */
+      .tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); margin-bottom: 18px; position: relative; max-width: 100%; overflow-x: auto; }
+      .tab { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; cursor: pointer; padding: 9px 16px; border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--mut); transition: color 0.25s; white-space: nowrap; }
+      .tab svg { width: 15px; height: 15px; }
+      .tab[aria-selected='true'] { color: #062022; }
+      .tab-ink { position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 0; width: 0; border-radius: 10px; background: var(--acc); transition: transform 0.45s var(--spring), width 0.45s var(--spring); }
+      .panel[hidden] { display: none; }
+      .panel { animation: panel 0.45s var(--ease); }
+      @keyframes panel { from { opacity: 0; transform: translateY(8px); } }
+      ol.steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; counter-reset: s; }
+      ol.steps li { counter-increment: s; display: flex; gap: 14px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; font-size: 15px; transition: border-color 0.3s; }
+      ol.steps li:hover { border-color: var(--line2); }
+      ol.steps li::before { content: counter(s); flex: none; width: 27px; height: 27px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 750; color: #062022; background: linear-gradient(135deg, #6ff0dc, #3fd1c5); }
+      ol.steps b { font-weight: 650; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.86em; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.07); padding: 1px 6px; border-radius: 6px; }
+      .copy { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 1px 8px; border-radius: 7px; border: 1px solid var(--line2); background: none; color: var(--mut); font-size: 12px; cursor: pointer; vertical-align: 1px; transition: color 0.2s, border-color 0.2s, background 0.2s; }
+      .copy:hover { color: var(--txt); }
+      .copy.ok { color: #062022; background: var(--acc); border-color: var(--acc); }
+      .note { margin-top: 14px; padding: 14px 16px; border-radius: 14px; background: rgba(157, 123, 250, 0.07); border: 1px solid rgba(157, 123, 250, 0.2); color: #d3c7ff; font-size: 14px; }
+      .note.warn { background: rgba(250, 204, 21, 0.06); border-color: rgba(250, 204, 21, 0.2); color: #f5e3a3; }
 
-      .release { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; margin-bottom: 12px; overflow: hidden; }
+      /* changelog */
+      .release { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; margin-bottom: 10px; overflow: hidden; transition: border-color 0.3s; }
+      .release:hover { border-color: var(--line2); }
+      .release::details-content { block-size: 0; overflow: hidden; transition: block-size 0.45s var(--ease), content-visibility 0.45s allow-discrete; }
+      .release[open]::details-content { block-size: auto; }
       .release summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 16px 18px; }
       .release summary::-webkit-details-marker { display: none; }
-      .ver { font-weight: 700; font-size: 15px; }
-      .latest { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--acc); border: 1px solid rgba(63, 209, 197, 0.3); padding: 2px 8px; border-radius: 999px; }
+      .ver { font-weight: 720; font-size: 15px; font-variant-numeric: tabular-nums; }
+      .latest { font-size: 10.5px; font-weight: 750; letter-spacing: 0.05em; text-transform: uppercase; color: var(--acc); border: 1px solid rgba(63, 209, 197, 0.3); padding: 2px 8px; border-radius: 999px; }
       .date { color: var(--mut); font-size: 13px; margin-left: auto; }
-      .chev { width: 16px; height: 16px; color: var(--mut); transition: transform 0.3s var(--ease); }
+      .chev { width: 16px; height: 16px; color: var(--mut); transition: transform 0.35s var(--ease); flex: none; }
       .release[open] .chev { transform: rotate(180deg); }
       .body { padding: 0 18px 16px; }
       .group { margin-top: 6px; }
-      .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin: 8px 0 6px; padding: 2px 8px; border-radius: 6px; }
+      .tag { display: inline-block; font-size: 10.5px; font-weight: 750; letter-spacing: 0.05em; text-transform: uppercase; margin: 8px 0 6px; padding: 2px 8px; border-radius: 6px; }
       .tag.added { color: var(--acc); background: rgba(63, 209, 197, 0.1); }
       .tag.changed { color: var(--pop); background: rgba(157, 123, 250, 0.12); }
-      .tag.fixed { color: #facc15; background: rgba(250, 204, 21, 0.1); }
+      .tag.fixed { color: var(--warn); background: rgba(250, 204, 21, 0.1); }
       .body ul { margin: 0; padding-left: 18px; color: #c9d4d6; font-size: 14.5px; }
       .body li { margin: 6px 0; }
       .body li::marker { color: #45606a; }
       .body strong { color: var(--txt); font-weight: 600; }
+      .older .release:nth-child(n + 5) { display: none; }
+      .older.all .release { display: block; }
+      .more { display: flex; margin: 16px auto 0; background: none; cursor: pointer; }
 
-      footer { padding: 40px 0 56px; color: var(--mut); font-size: 13px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-top: 1px solid rgba(255, 255, 255, 0.05); }
+      footer { padding: 36px 0 52px; color: var(--mut); font-size: 13px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-top: 1px solid rgba(255, 255, 255, 0.06); }
       footer a { text-decoration: none; }
       footer a:hover { color: var(--txt); }
 
-      .fade { animation: fade 0.7s var(--ease) both; }
-      .fade.d1 { animation-delay: 0.08s; } .fade.d2 { animation-delay: 0.16s; } .fade.d3 { animation-delay: 0.24s; }
-      @keyframes fade { from { opacity: 0; transform: translateY(12px); } }
-      @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
-      @media (max-width: 760px) {
-        .hero { grid-template-columns: 1fr; padding-top: 24px; gap: 24px; }
-        .mark { order: -1; } .mark svg { width: 160px; }
-        .grid { grid-template-columns: 1fr; }
+      /* toast + burst */
+      .toast { position: fixed; left: 50%; bottom: 22px; z-index: 50; display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px); padding: 12px 14px 12px 12px; border-radius: 16px; background: rgba(25, 38, 41, 0.95); border: 1px solid #34505a; backdrop-filter: blur(12px); box-shadow: 0 24px 50px -20px rgba(0,0,0,.8); font-size: 14px; transform: translate(-50%, 140%); opacity: 0; transition: transform 0.55s var(--spring), opacity 0.3s; }
+      .toast.show { transform: translate(-50%, 0); opacity: 1; }
+      .toast .ok { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--acc); color: #062022; flex: none; }
+      .toast .ok svg { width: 15px; height: 15px; }
+      .toast a { color: var(--acc); font-weight: 650; text-decoration: none; white-space: nowrap; }
+      .spark { position: fixed; z-index: 60; width: 8px; height: 8px; border-radius: 2px; pointer-events: none; }
+
+      /* reveal */
+      .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); transition-delay: var(--d, 0s); }
+      .reveal.in { opacity: 1; transform: none; }
+      a.dl-card.reveal.in:hover { transform: translateY(-4px); }
+      .no-js .reveal { opacity: 1; transform: none; }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
+        .reveal { opacity: 1; transform: none; }
+        html { scroll-behavior: auto; }
+      }
+      @media (max-width: 900px) {
+        .hero { grid-template-columns: 1fr; padding-top: 28px; gap: 48px; }
+        .dl-grid, .grid { grid-template-columns: 1fr 1fr; }
+        .float-kbd { right: 0; }
+        .float-agent { left: 0; }
+      }
+      @media (max-width: 620px) {
+        .wrap { padding: 0 16px; }
         .links a.hide-sm { display: none; }
+        .dl-grid, .grid { grid-template-columns: 1fr; }
+        section { padding: 56px 0; }
+        .float-kbd, .float-agent { display: none; }
+        .btn { width: 100%; justify-content: center; }
+        .cta .ghost { flex: 1; justify-content: center; }
+        .app { min-height: 300px; }
       }
     </style>
   </head>
-  <body>
-    <div class="wrap">
-      <nav>
+  <body class="no-js">
+    <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
+    <nav id="nav">
+      <div class="wrap">
         <a class="brand" href="/">{{LOGO}}<span>Smart Tasks</span></a>
         <div class="links">
           <a href="#features" class="hide-sm">Features</a>
-          <a href="#install">Install</a>
+          <a href="#install" class="hide-sm">Install</a>
           <a href="#changelog">Changelog</a>
-          <a href="{{API}}/privacy" class="hide-sm">Privacy</a>
+          <a href="#download" class="pill">Download</a>
         </div>
-      </nav>
-
-      <header class="hero">
-        <div>
-          <a class="eyebrow fade" href="#changelog"><span class="dot"></span>New in {{VERSION}}: activity history and agent notifications</a>
-          <h1 class="fade d1">Your to-do list, <em>everywhere</em> you work.</h1>
-          <p class="lead fade d2">Capture tasks in a click, get reminders on time and stay in sync on every device. Let your AI agent add tasks and ping you when it needs you.</p>
-          <div class="cta fade d3">
-            <a class="btn" href="/{{ZIP}}" download>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M6.5 10.5 12 16l5.5-5.5M5 20h14"/></svg>
-              Download extension
-            </a>
-            {{DESKTOP_CTA}}
-            <a class="ghost" href="#install">How to install</a>
-          </div>
-          <p class="meta fade d3">Version <b>{{VERSION}}</b> · {{SIZE}} · Works in Chrome, Comet, Brave, Edge and Arc{{DESKTOP_META}}</p>
-        </div>
-        <div class="mark">{{LOGO_BIG}}</div>
-      </header>
-    </div>
+      </div>
+    </nav>
 
     <div class="wrap">
+      <header class="hero">
+        <div>
+          <a class="eyebrow reveal" href="#changelog"><span class="new">NEW</span>{{VERSION}}: desktop apps and a welcome tour<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+          <h1 class="reveal" style="--d: 0.06s">Your to-do list, <em>everywhere</em> you work.</h1>
+          <p class="lead reveal" style="--d: 0.12s">Capture tasks in a keystroke, get reminders you can act on, and stay in sync on every computer. Your AI agent can add tasks and ping you when it needs you.</p>
+          <div class="cta reveal" style="--d: 0.18s">
+            <a class="btn" id="primary" href="/{{ZIP}}" download data-plat="ext">
+              <span class="os" id="primary-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M6.5 10.5 12 16l5.5-5.5M5 20h14"/></svg></span>
+              <span class="l"><b id="primary-label">Download extension</b><small id="primary-meta">Version {{VERSION}} · {{SIZE}}</small></span>
+            </a>
+            <a class="ghost" href="#download">All downloads</a>
+          </div>
+          <div class="meta reveal" style="--d: 0.24s">
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Free</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Works offline</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Updates itself</span>
+          </div>
+        </div>
+
+        <div class="stage reveal" style="--d: 0.15s" id="stage">
+          <div class="float-kbd" aria-hidden="true"><kbd data-k="0">Ctrl</kbd><kbd data-k="1">Alt</kbd><kbd data-k="2">K</kbd></div>
+          <div class="float-agent" aria-hidden="true"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 14h.01M15 14h.01"/></svg></i>Agent added 2 tasks</div>
+          <div class="device" id="device" aria-label="Animated preview of the Smart Tasks app" role="img">
+            <div class="bar">{{LOGO}}<span>Smart Tasks</span><span class="ctl"><i></i><i></i></span></div>
+            <div class="app">
+              <h4>Today</h4>
+              <div class="day" id="day">3 tasks · 1 done</div>
+              <div class="qa" id="qa"><span class="plus">+</span><span id="qa-text"><span class="ph">Add a task…</span></span></div>
+              <ul class="tasks" id="tasks"></ul>
+            </div>
+            <div class="notif" id="notif">
+              <span class="ni"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span>
+              <span><b>Call the bank</b><small>Reminder · now</small><span class="acts"><span id="n-done">Mark done</span><span>Snooze 10m</span></span></span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section id="download">
+        <div class="kicker reveal">Download</div>
+        <h2 class="reveal">Pick where you want it</h2>
+        <p class="sub reveal">Same account, same tasks. Use one, or all three, and everything stays in sync.</p>
+        <div class="dl-grid" id="dl-grid">
+{{DL_CARDS}}
+        </div>
+      </section>
+
       <section id="features">
-        <h2>Small, fast, and it just syncs</h2>
-        <p class="sub">Everything lives in a 400 pixel popup, works offline and catches up when you are back.</p>
+        <div class="kicker reveal">Features</div>
+        <h2 class="reveal">Small, fast, and it just syncs</h2>
+        <p class="sub reveal">Everything fits in a compact window, works offline and catches up when you are back online.</p>
         <div class="grid">
-          <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></div><h3>Quick add that understands you</h3><p>Type "Pay rent friday 9am !high #home" and the date, priority and category fill in.</p></div>
-          <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div><h3>Reminders that act</h3><p>Mark a task done or snooze it straight from the notification.</p></div>
-          <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 21v-5h5M21 3v5h-5"/></svg></div><h3>Real-time sync</h3><p>Add a task at the office and it is on your home computer a second later.</p></div>
-          <div class="card"><div class="ico pop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 14h.01M15 14h.01"/></svg></div><h3>Works with AI agents</h3><p>Claude and other MCP apps can manage your tasks and send you notifications.</p></div>
-          <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></div><h3>Full history</h3><p>See what was added, finished or deleted, when, and whether you or your agent did it.</p></div>
-          <div class="card"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div><h3>Your devices, your call</h3><p>See every signed-in browser, who is active now, and sign any of them out.</p></div>
+          <div class="card reveal"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></div><h3>Quick add that understands you</h3><p>Type "Pay rent friday 9am !high #home" and the date, priority and category fill in.</p></div>
+          <div class="card reveal" style="--d: 0.06s"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div><h3>Reminders that act</h3><p>Mark a task done or snooze it straight from the notification.</p></div>
+          <div class="card reveal" style="--d: 0.12s"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 21v-5h5M21 3v5h-5"/></svg></div><h3>Real-time sync</h3><p>Add a task at the office and it is on your home computer a second later.</p></div>
+          <div class="card reveal"><div class="ico pop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 14h.01M15 14h.01"/></svg></div><h3>Works with AI agents</h3><p>Claude and other MCP apps can manage your tasks and send you notifications.</p></div>
+          <div class="card reveal" style="--d: 0.06s"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 15h8"/></svg></div><h3>One shortcut away</h3><p>The desktop app lives in your tray or menu bar. Press <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>K</kbd> from anywhere.</p></div>
+          <div class="card reveal" style="--d: 0.12s"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></div><h3>Full history</h3><p>See what was added, finished or deleted, when, and whether you or your agent did it.</p></div>
         </div>
       </section>
 
       <section id="install">
-        <h2>Install in a minute</h2>
-        <p class="sub">Smart Tasks is installed as an unpacked extension while it waits for the Chrome Web Store.</p>
-        <ol class="steps">
-          <li><span><b>Download</b> <a href="/{{ZIP}}" download>{{ZIP}}</a> and unzip it. Keep the folder somewhere permanent, like Documents.</span></li>
-          <li><span>Open <code>chrome://extensions</code> in your browser. In Comet use <code>comet://extensions</code>, in Edge <code>edge://extensions</code>.</span></li>
-          <li><span>Turn on <b>Developer mode</b> at the top right.</span></li>
-          <li><span>Click <b>Load unpacked</b> and choose the unzipped folder. Pin Smart Tasks from the puzzle icon so it sits in your toolbar.</span></li>
-        </ol>
-        <p class="note"><b>Updating:</b> download the new version, replace the files inside your Smart Tasks folder, then click the reload icon on the extension card. Your tasks stay put. If you remove the extension instead, just sign in again and everything syncs back.</p>
+        <div class="kicker reveal">Install</div>
+        <h2 class="reveal">Up and running in a minute</h2>
+        <p class="sub reveal">Pick your platform for the steps.</p>
+        <div class="reveal">
+          <div class="tabs" role="tablist" aria-label="Platform">
+            <span class="tab-ink" id="ink"></span>
+            <button class="tab" role="tab" id="t-win" aria-controls="p-win" aria-selected="true" data-plat="win"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5 10.5 4.5v7H3zM11.5 4.4 21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.4z"/></svg>Windows</button>
+            <button class="tab" role="tab" id="t-mac" aria-controls="p-mac" aria-selected="false" tabindex="-1" data-plat="mac"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.2-1.7-3-1.9-3.6-2-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8 1.6 0 2 .8 3.4.8 1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9 0 0-2.8-1.1-2.9-4.3zM13.9 5.3c.7-.9 1.2-2 1-3.3-1 0-2.2.7-3 1.5-.6.7-1.2 1.9-1 3.1 1.1.1 2.3-.6 3-1.3z"/></svg>Mac</button>
+            <button class="tab" role="tab" id="t-ext" aria-controls="p-ext" aria-selected="false" tabindex="-1" data-plat="ext"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M12 8.5h8.5M8.97 13.75 4.7 6.4M15.03 13.75 10.8 21"/></svg>Extension</button>
+          </div>
+
+          <div class="panel" role="tabpanel" id="p-win" aria-labelledby="t-win">
+            <ol class="steps">
+              <li><span><b>Run the installer</b> you downloaded. If Windows shows "Windows protected your PC", click <b>More info</b>, then <b>Run anyway</b>.</span></li>
+              <li><span>Smart Tasks opens and keeps running in the <b>system tray</b>. Press <kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>K</kbd> anywhere to show or hide it.</span></li>
+              <li><span><b>Sign in</b> to sync with your other devices, or keep tasks on this computer only. New versions install themselves.</span></li>
+            </ol>
+          </div>
+          <div class="panel" role="tabpanel" id="p-mac" aria-labelledby="t-mac" hidden>
+            <ol class="steps">
+              <li><span><b>Open the .dmg</b> you downloaded and drag Smart Tasks into <b>Applications</b>.</span></li>
+              <li><span>Open Smart Tasks. If macOS says it can't check the app, open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>. You only do this once.</span></li>
+              <li><span>Smart Tasks lives in your <b>menu bar</b>. Press <kbd>⌘</kbd> <kbd>⌥</kbd> <kbd>K</kbd> anywhere to show or hide it. New versions install themselves.</span></li>
+            </ol>
+          </div>
+          <div class="panel" role="tabpanel" id="p-ext" aria-labelledby="t-ext" hidden>
+            <ol class="steps">
+              <li><span><b>Download</b> <a href="/{{ZIP}}" download data-plat="ext">{{ZIP}}</a> and unzip it. Keep the folder somewhere permanent, like Documents.</span></li>
+              <li><span>Open <code>chrome://extensions</code><button class="copy" data-copy="chrome://extensions">Copy</button> in your browser. In Comet use <code>comet://extensions</code>, in Edge <code>edge://extensions</code>.</span></li>
+              <li><span>Turn on <b>Developer mode</b> at the top right.</span></li>
+              <li><span>Click <b>Load unpacked</b> and choose the unzipped folder. Pin Smart Tasks from the puzzle icon so it sits in your toolbar.</span></li>
+            </ol>
+            <p class="note"><b>Updating:</b> Smart Tasks tells you when a new version is out and installs it for you. Your tasks stay put, and if you ever remove the extension, sign in again and everything syncs back.</p>
+          </div>
+        </div>
       </section>
 
       <section id="changelog">
-        <h2>Changelog</h2>
-        <p class="sub">What changed in each version.</p>
-        {{CHANGELOG}}
+        <div class="kicker reveal">Changelog</div>
+        <h2 class="reveal">What's new</h2>
+        <p class="sub reveal">Every version, newest first.</p>
+        <div class="older reveal" id="older">
+{{CHANGELOG}}
+        </div>
+        <button class="ghost more" id="more" hidden>Show all versions</button>
       </section>
 
       <footer>
         <span>Smart Tasks {{VERSION}} · Updated {{DATE}}</span>
-        <span><a href="#install">Install</a> · <a href="{{API}}/privacy">Privacy</a></span>
+        <span><a href="#download">Download</a> · <a href="#install">Install</a> · <a href="{{API}}/privacy">Privacy</a></span>
       </footer>
     </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite">
+      <span class="ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+      <span id="toast-msg">Your download is starting.</span>
+      <a href="#install" id="toast-link">Install steps ↓</a>
+    </div>
+
+    <script type="application/json" id="dl-data">{{DL_JSON}}</script>
+    <script>
+      (() => {
+        document.body.classList.remove('no-js');
+        const $ = s => document.querySelector(s);
+        const $$ = s => [...document.querySelectorAll(s)];
+        const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const DL = JSON.parse($('#dl-data').textContent);
+
+        /* ── which computer is this? ── */
+        const ua = navigator.userAgent;
+        const plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+        const mobile = /Android|iPhone|iPad|iPod/i.test(ua) || (navigator.userAgentData && navigator.userAgentData.mobile);
+        const mine = mobile ? 'ext' : /mac/i.test(plat) || /Mac OS X/.test(ua) ? 'mac' : /win/i.test(plat) || /Windows/.test(ua) ? 'win' : 'ext';
+        const isMac = mine === 'mac';
+
+        // Primary button: this computer's app when there is one, else the extension.
+        const pick = DL[mine] ? mine : 'ext';
+        const card = $(`.dl-card[data-plat="${pick}"]`);
+        if (card) card.classList.add('mine');
+        if (pick !== 'ext') {
+          const p = DL[pick];
+          const btn = $('#primary');
+          btn.href = p.href;
+          btn.dataset.plat = pick;
+          $('#primary-label').textContent = `Download for ${pick === 'mac' ? 'Mac' : 'Windows'}`;
+          $('#primary-meta').textContent = `Version {{VERSION}} · ${p.size}`;
+          $('#primary-ico').innerHTML = card.querySelector('.dl-ico').innerHTML;
+        }
+        if (isMac) {
+          $$('.float-kbd kbd')[0].textContent = '⌘';
+          $$('.float-kbd kbd')[1].textContent = '⌥';
+          $$('#features kbd').forEach((k, i) => (k.textContent = ['⌘', '⌥', 'K'][i]));
+        }
+
+        /* ── nav background once scrolled ── */
+        const nav = $('#nav');
+        const onScroll = () => nav.classList.toggle('scrolled', scrollY > 8);
+        addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+
+        /* ── reveal on scroll ── */
+        const io = new IntersectionObserver(es => es.forEach(e => e.isIntersecting && (e.target.classList.add('in'), io.unobserve(e.target))), { rootMargin: '0px 0px -8% 0px' });
+        $$('.reveal').forEach(el => io.observe(el));
+
+        /* ── pointer spotlight on cards ── */
+        $$('.card, .dl-card').forEach(el =>
+          el.addEventListener('pointermove', e => {
+            const r = el.getBoundingClientRect();
+            el.style.setProperty('--x', `${e.clientX - r.left}px`);
+            el.style.setProperty('--y', `${e.clientY - r.top}px`);
+          }),
+        );
+
+        /* ── tilt the demo with the pointer ── */
+        const stage = $('#stage');
+        const device = $('#device');
+        if (!reduce && matchMedia('(hover: hover)').matches) {
+          stage.addEventListener('pointermove', e => {
+            const r = stage.getBoundingClientRect();
+            const x = (e.clientX - r.left) / r.width - 0.5;
+            const y = (e.clientY - r.top) / r.height - 0.5;
+            device.style.setProperty('--ry', `${x * 10}deg`);
+            device.style.setProperty('--rx', `${-y * 8}deg`);
+          });
+          stage.addEventListener('pointerleave', () => {
+            device.style.setProperty('--ry', '0deg');
+            device.style.setProperty('--rx', '0deg');
+          });
+        }
+
+        /* ── install tabs ── */
+        const tabs = $$('.tab');
+        const ink = $('#ink');
+        const moveInk = t => {
+          ink.style.width = `${t.offsetWidth}px`;
+          ink.style.transform = `translateX(${t.offsetLeft}px)`;
+        };
+        const select = (key, focus) => {
+          tabs.forEach(t => {
+            const on = t.dataset.plat === key;
+            t.setAttribute('aria-selected', on);
+            t.tabIndex = on ? 0 : -1;
+            $(`#${t.getAttribute('aria-controls')}`).hidden = !on;
+            if (on) {
+              moveInk(t);
+              if (focus) t.focus();
+            }
+          });
+        };
+        tabs.forEach((t, i) => {
+          t.addEventListener('click', () => select(t.dataset.plat));
+          t.addEventListener('keydown', e => {
+            const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+            if (d) select(tabs[(i + d + tabs.length) % tabs.length].dataset.plat, true);
+          });
+        });
+        select(mine);
+        addEventListener('resize', () => moveInk($('.tab[aria-selected="true"]')));
+        document.fonts && document.fonts.ready.then(() => moveInk($('.tab[aria-selected="true"]')));
+
+        /* ── copy buttons ── */
+        $$('.copy').forEach(b =>
+          b.addEventListener('click', async () => {
+            try {
+              await navigator.clipboard.writeText(b.dataset.copy);
+              b.textContent = 'Copied';
+              b.classList.add('ok');
+              setTimeout(() => ((b.textContent = 'Copy'), b.classList.remove('ok')), 1600);
+            } catch {}
+          }),
+        );
+
+        /* ── changelog: show the latest few, expand on demand ── */
+        const older = $('#older');
+        const more = $('#more');
+        if (older.querySelectorAll('.release').length > 4) {
+          more.hidden = false;
+          more.addEventListener('click', () => {
+            older.classList.add('all');
+            more.hidden = true;
+          });
+        }
+        if (location.hash.startsWith('#v')) {
+          const r = document.getElementById(location.hash.slice(1));
+          if (r && r.tagName === 'DETAILS') (older.classList.add('all'), (more.hidden = true), (r.open = true));
+        }
+
+        /* ── download: confetti, toast, open the right install steps ── */
+        const toast = $('#toast');
+        let toastTimer;
+        const burst = (x, y) => {
+          if (reduce) return;
+          const colors = ['#6ff0dc', '#3fd1c5', '#9d7bfa', '#facc15', '#ffffff'];
+          for (let i = 0; i < 26; i++) {
+            const s = document.createElement('span');
+            s.className = 'spark';
+            s.style.left = `${x}px`;
+            s.style.top = `${y}px`;
+            s.style.background = colors[i % colors.length];
+            document.body.append(s);
+            const a = Math.random() * Math.PI * 2;
+            const v = 60 + Math.random() * 110;
+            s.animate(
+              [
+                { transform: 'translate(-50%,-50%) rotate(0) scale(1)', opacity: 1 },
+                { transform: `translate(${Math.cos(a) * v}px, ${Math.sin(a) * v + 70}px) rotate(${Math.random() * 540}deg) scale(.6)`, opacity: 0 },
+              ],
+              { duration: 900 + Math.random() * 400, easing: 'cubic-bezier(.2,.7,.3,1)' },
+            ).onfinish = () => s.remove();
+          }
+        };
+        document.addEventListener('click', e => {
+          const a = e.target.closest('a[download]');
+          if (!a) return;
+          const key = a.dataset.plat || (a.closest('[data-plat]') || {}).dataset?.plat || 'ext';
+          const r = a.getBoundingClientRect();
+          burst(e.clientX || r.left + r.width / 2, e.clientY || r.top + r.height / 2);
+          select(key);
+          const name = (DL[key] && DL[key].name) || 'Smart Tasks';
+          $('#toast-msg').textContent = `Downloading Smart Tasks for ${name === 'Browser extension' ? 'your browser' : name}.`;
+          toast.classList.add('show');
+          clearTimeout(toastTimer);
+          toastTimer = setTimeout(() => toast.classList.remove('show'), 6000);
+        });
+        $('#toast-link').addEventListener('click', () => toast.classList.remove('show'));
+
+        /* ── live demo ── */
+        const list = $('#tasks');
+        const qa = $('#qa');
+        const qaText = $('#qa-text');
+        const notif = $('#notif');
+        const day = $('#day');
+        const keys = $$('.float-kbd kbd');
+        const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17 19 7"/></svg>';
+        const START = [
+          { t: 'Call the bank', chips: [['3:00 PM', '']] },
+          { t: 'Reply to the client email', chips: [['Work', 'cat']] },
+          { t: 'Book a dentist appointment', chips: [], done: true },
+        ];
+        const count = () => {
+          const all = list.children.length;
+          const done = list.querySelectorAll('.done').length;
+          day.textContent = `${all} tasks · ${done} done`;
+        };
+        const row = (task, enter) => {
+          const li = document.createElement('li');
+          li.className = `task${task.done ? ' done' : ''}${enter ? ' enter' : ''}`;
+          li.innerHTML = `<button class="tick" aria-label="Toggle done">${CHECK}</button><span class="t"></span>`;
+          li.querySelector('.t').textContent = task.t;
+          task.chips.forEach(([c, k], i) => {
+            const s = document.createElement('span');
+            s.className = `chip ${k}${enter ? ' enter' : ''}`;
+            s.style.animationDelay = `${0.15 + i * 0.08}s`;
+            s.textContent = c;
+            li.append(s);
+          });
+          li.querySelector('.tick').addEventListener('click', () => {
+            li.classList.toggle('done');
+            if (li.classList.contains('done')) {
+              const r = li.querySelector('.tick').getBoundingClientRect();
+              burst(r.left + r.width / 2, r.top + r.height / 2);
+            }
+            count();
+          });
+          return li;
+        };
+        const reset = () => {
+          list.replaceChildren(...START.map(t => row(t)));
+          qaText.innerHTML = '<span class="ph">Add a task…</span>';
+          count();
+        };
+
+        let visible = true;
+        new IntersectionObserver(([e]) => (visible = e.isIntersecting)).observe(device);
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        const idle = async ms => {
+          await sleep(ms);
+          while (!visible || document.hidden) await sleep(300);
+        };
+
+        const PHRASE = [['Pay rent ', ''], ['friday 9am ', 'tok'], ['!high ', 'tok hi'], ['#home', 'tok cat']];
+        const typeQuick = async () => {
+          qa.classList.add('focus');
+          qaText.innerHTML = '';
+          const caret = document.createElement('span');
+          caret.className = 'caret';
+          for (const [part, cls] of PHRASE) {
+            const span = document.createElement('span');
+            if (cls) span.className = cls;
+            qaText.append(span, caret);
+            for (const ch of part) {
+              span.textContent += ch;
+              await sleep(38 + Math.random() * 45);
+            }
+          }
+          await idle(650);
+          qa.classList.remove('focus');
+          qaText.innerHTML = '<span class="ph">Add a task…</span>';
+          list.prepend(row({ t: 'Pay rent', chips: [['Fri 9:00 AM', ''], ['High', 'hi'], ['Home', 'cat']] }, true));
+          if (list.children.length > 4) list.lastElementChild.remove();
+          count();
+        };
+        const pressKeys = async () => {
+          for (const k of keys) (k.classList.add('on'), await sleep(140));
+          await sleep(380);
+          keys.forEach(k => k.classList.remove('on'));
+        };
+        const tick = li => {
+          if (!li || li.classList.contains('done')) return;
+          li.classList.add('done');
+          count();
+        };
+        const remind = async () => {
+          notif.classList.add('show');
+          await idle(1700);
+          const b = $('#n-done');
+          b.classList.add('press');
+          await sleep(260);
+          b.classList.remove('press');
+          notif.classList.remove('show');
+          await sleep(250);
+          tick([...list.children].find(li => li.querySelector('.t').textContent === 'Call the bank'));
+        };
+
+        reset();
+        if (reduce) {
+          list.prepend(row({ t: 'Pay rent', chips: [['Fri 9:00 AM', ''], ['High', 'hi'], ['Home', 'cat']] }));
+          if (list.children.length > 4) list.lastElementChild.remove();
+          count();
+          return;
+        }
+        (async () => {
+          await idle(900);
+          for (;;) {
+            await pressKeys();
+            await idle(500);
+            await typeQuick();
+            await idle(1300);
+            await remind();
+            await idle(1200);
+            tick(list.querySelector('.task:not(.done):nth-child(2)'));
+            await idle(2600);
+            list.style.transition = 'opacity .4s';
+            list.style.opacity = '0';
+            await sleep(420);
+            reset();
+            list.style.opacity = '1';
+            await idle(1400);
+          }
+        })();
+      })();
+    </script>
   </body>
 </html>
