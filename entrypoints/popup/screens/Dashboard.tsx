@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CalendarClock,
   CircleCheckBig,
   CircleDashed,
   Flame,
   FolderOpen,
-  Hash,
   Layers,
   ListPlus,
   Plus,
@@ -15,14 +13,15 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { cx, formatDue, parseQuickAdd, PRIORITY_META } from '../../../lib/utils';
+import { cx, startOfDay } from '../../../lib/utils';
 import { useApp, type Tab } from '../state/AppContext';
-import Avatar from '../components/Avatar';
 import Confetti from '../components/Confetti';
 import EmptyState from '../components/EmptyState';
 import SyncBadge from '../components/SyncBadge';
 import TaskCard from '../components/TaskCard';
 import ScrollRow from '../components/ScrollRow';
+import QuickAdd from '../components/QuickAdd';
+import type { Task } from '../../../lib/types';
 
 function Pill({ active, onClick, children, color }: { active: boolean; onClick: () => void; children: React.ReactNode; color?: string }) {
   return (
@@ -44,12 +43,59 @@ function Pill({ active, onClick, children, color }: { active: boolean; onClick: 
   );
 }
 
+type Section = { key: string; label: string; tone: string; tasks: Task[] };
+
+/** Splits the (already due-sorted) list into friendly buckets. */
+function sectionize(list: Task[]): Section[] {
+  const today = startOfDay(Date.now()).getTime();
+  const D = 86_400_000;
+  const now = Date.now();
+  const meta: Record<string, [string, string]> = {
+    overdue: ['Overdue', '#f43f5e'],
+    today: ['Today', '#3fd1c5'],
+    tomorrow: ['Tomorrow', '#9d7bfa'],
+    week: ['This week', '#60a5fa'],
+    later: ['Later', '#94a3b8'],
+    anytime: ['Anytime', '#798a8e'],
+    done: ['Done', '#22c55e'],
+  };
+  const bucket = (t: Task) => {
+    if (t.completedAt) return 'done';
+    if (t.dueAt == null) return 'anytime';
+    if (t.dueAt < now) return 'overdue';
+    if (t.dueAt < today + D) return 'today';
+    if (t.dueAt < today + 2 * D) return 'tomorrow';
+    if (t.dueAt < today + 7 * D) return 'week';
+    return 'later';
+  };
+  const out: Section[] = [];
+  for (const t of list) {
+    const k = bucket(t);
+    const last = out[out.length - 1];
+    if (last?.key === k) last.tasks.push(t);
+    else out.push({ key: k, label: meta[k][0], tone: meta[k][1], tasks: [t] });
+  }
+  return out;
+}
+
+/** Days in a row (ending today or yesterday) with at least one task finished. */
+function streakOf(tasks: Task[]): number {
+  const days = new Set(tasks.filter(t => t.completedAt).map(t => startOfDay(t.completedAt!).getTime()));
+  const D = 86_400_000;
+  let day = startOfDay(Date.now()).getTime();
+  if (!days.has(day)) day -= D;
+  let n = 0;
+  while (days.has(day)) {
+    n++;
+    day -= D;
+  }
+  return n;
+}
+
 export default function Dashboard() {
   const app = useApp();
-  const [quick, setQuick] = useState('');
+  const [adding, setAdding] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [shake, setShake] = useState(0);
-  const addRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [party, setParty] = useState(0);
   const prevPending = useRef(app.counts.pending);
@@ -68,10 +114,10 @@ export default function Dashboard() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || app.editTaskId || app.confirmData) return;
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || app.editTaskId || app.confirmData || adding) return;
       if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
-        addRef.current?.focus();
+        setAdding(true);
       } else if (e.key === '/') {
         e.preventDefault();
         setSearchOpen(true);
@@ -80,31 +126,15 @@ export default function Dashboard() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [app.editTaskId, app.confirmData]);
+  }, [app.editTaskId, app.confirmData, adding]);
 
-  const parsed = useMemo(() => parseQuickAdd(quick), [quick]);
-  const parsedCat = parsed.categoryName
-    ? (app.categories.find(c => c.name.toLowerCase().replace(/\s+/g, '') === parsed.categoryName!.toLowerCase()) ??
-      app.categories.find(c => c.name.toLowerCase().startsWith(parsed.categoryName!.toLowerCase())) ??
-      null)
-    : null;
-
-  const addQuick = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quick.trim()) {
-      setShake(Date.now());
-      addRef.current?.focus();
-      return;
-    }
-    void app.createTask({
-      title: parsed.title,
-      dueAt: parsed.dueAt,
-      priority: parsed.priority,
-      categoryId: parsedCat?.id ?? (app.filter !== 'all' ? app.filter : null),
-    });
-    setQuick('');
-    if (app.tab === 'completed') app.setTab('pending');
-  };
+  const sections = useMemo(() => sectionize(app.visibleTasks), [app.visibleTasks]);
+  const streak = useMemo(() => streakOf(app.tasks), [app.tasks]);
+  const doneToday = useMemo(() => {
+    const t0 = startOfDay(Date.now()).getTime();
+    return app.tasks.filter(t => (t.completedAt ?? 0) >= t0).length;
+  }, [app.tasks]);
+  const pct = app.counts.total ? Math.round((app.counts.completed / app.counts.total) * 100) : 0;
 
   const tabs: Array<{ id: Tab; label: string; count: number }> = [
     { id: 'all', label: 'All', count: app.counts.total },
@@ -116,7 +146,7 @@ export default function Dashboard() {
   const empty = app.query
     ? { icon: SearchX, title: 'No matches', sub: `Nothing matches “${app.query}”.` }
     : app.tasks.length === 0
-      ? { icon: ListPlus, title: 'Add your first task', sub: 'Type above and hit Enter. It syncs to your other devices instantly.' }
+      ? { icon: ListPlus, title: 'Add your first task', sub: 'Tap the plus button, or press N.' }
       : app.tab === 'completed'
         ? { icon: CircleDashed, title: 'Nothing finished yet', sub: 'Tick something off and it lands here.' }
         : app.tab === 'pending'
@@ -124,21 +154,46 @@ export default function Dashboard() {
           : { icon: FolderOpen, title: 'Nothing here', sub: 'No tasks in this category yet.' };
 
   return (
-    <div className="ambient flex h-full flex-col bg-bg">
+    <div className="ambient relative flex h-full flex-col bg-bg">
       <Confetti fire={party} />
 
       <header className="flex items-center gap-3 px-6 pt-6">
-        <h1 className="min-w-0 flex-1 truncate text-[20px] font-medium leading-tight tracking-[-.01em]">Organize your daily targets</h1>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-[15px] font-medium tabular-nums">
+              <span key={app.counts.completed} className="anim-tick inline-block text-acc">
+                {app.counts.completed}
+              </span>{' '}
+              <span className="text-mut">of {app.counts.total} done</span>
+            </p>
+            <span className="truncate text-[11px] text-mut">
+              {app.counts.total === 0
+                ? 'Fresh start'
+                : pct === 100
+                  ? 'All clear, nice work'
+                  : doneToday > 0
+                    ? `${doneToday} finished today`
+                    : `${app.counts.pending} to go`}
+            </span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[.06]" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Tasks done">
+            <div
+              className={cx('grad-acc h-full rounded-full transition-[width] duration-700 ease-[var(--ease-out)]', pct === 100 && 'glow')}
+              style={{ width: `${Math.max(pct, app.counts.total ? 2 : 0)}%` }}
+            />
+          </div>
+        </div>
         <div className="flex shrink-0 items-center gap-1">
+          {streak >= 2 && (
+            <span
+              title={`${streak}-day streak: you finished something ${streak} days in a row`}
+              className="anim-pop flex items-center gap-1 rounded-full border border-warn/25 bg-warn/10 px-2 py-1 text-[11px] font-semibold tabular-nums text-warn"
+            >
+              <Flame size={12} /> {streak}
+            </span>
+          )}
           {/* Only surface sync when something needs attention. */}
           {(app.sync === 'offline' || app.sync === 'error') && <SyncBadge state={app.sync} onClick={app.syncNow} />}
-          <button
-            aria-label="Switch account"
-            onClick={() => app.setSwitcherOpen(true)}
-            className="press rounded-full p-0.5 hover:ring-2 hover:ring-line"
-          >
-            {acc && <Avatar name={acc.name} email={acc.email} photoURL={acc.photoURL} hue={acc.hue} size={26} local={acc.local} />}
-          </button>
           <button
             aria-label="Settings"
             onClick={() => app.setScreen('settings')}
@@ -148,20 +203,6 @@ export default function Dashboard() {
           </button>
         </div>
       </header>
-
-      {app.counts.total > 0 && (
-        <div className="mt-3 flex items-center gap-3 px-6" title="Tasks completed">
-          <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/[.06]">
-            <div
-              className="grad-acc h-full rounded-full transition-[width] duration-700 ease-out"
-              style={{ width: `${Math.round((app.counts.completed / app.counts.total) * 100)}%` }}
-            />
-          </div>
-          <span className="shrink-0 text-[11.5px] tabular-nums text-mut">
-            <span className="text-txt">{app.counts.completed}</span> of {app.counts.total} done
-          </span>
-        </div>
-      )}
 
       {app.sessionExpired && acc && (
         <button
@@ -184,62 +225,8 @@ export default function Dashboard() {
         </button>
       )}
 
-      {/* Quick add */}
-      <form onSubmit={addQuick} className="mt-6 px-6">
-        <div key={shake} className={cx('flex items-stretch gap-2', shake > 0 && 'anim-shake')}>
-          <input
-            ref={addRef}
-            value={quick}
-            maxLength={500}
-            onChange={e => setQuick(e.target.value)}
-            placeholder="Add a new task... (press N)"
-            aria-label="New task"
-            className="min-w-0 flex-1 rounded-full border border-white/[.04] bg-black/20 px-4 py-2.5 text-[13.5px] outline-none transition-colors placeholder:text-mut/70 focus:border-acc/30"
-          />
-          <button
-            type="submit"
-            aria-label="Add task"
-            className="press btn-acc flex shrink-0 items-center gap-1 rounded-full px-4 text-[13px] font-semibold"
-          >
-            <Plus size={14} strokeWidth={2.5} /> Add
-          </button>
-        </div>
-        {quick.trim() && (
-        <div className="anim-pop mt-2 flex flex-wrap items-center gap-1 px-3 text-[11px] font-medium">
-          {(
-            <>
-              {parsed.dueAt && (
-                <span className="anim-pop inline-flex items-center gap-1 rounded-full bg-sun/15 px-2 py-0.5 text-sun">
-                  <CalendarClock size={10} /> {formatDue(parsed.dueAt).label}
-                </span>
-              )}
-              {parsed.priority && (
-                <span
-                  className="anim-pop inline-flex items-center gap-1 rounded-full px-2 py-0.5"
-                  style={{ background: `${PRIORITY_META[parsed.priority].color}26`, color: PRIORITY_META[parsed.priority].color }}
-                >
-                  <Flame size={10} /> {PRIORITY_META[parsed.priority].label}
-                </span>
-              )}
-              {parsed.categoryName && (
-                <span
-                  className="anim-pop inline-flex items-center gap-1 rounded-full px-2 py-0.5"
-                  style={parsedCat ? { background: `${parsedCat.color}26`, color: parsedCat.color } : undefined}
-                >
-                  <Hash size={10} /> {parsedCat ? parsedCat.name : `${parsed.categoryName}?`}
-                </span>
-              )}
-              {!parsed.dueAt && !parsed.priority && !parsed.categoryName && (
-                <span className="text-mut/70">Enter to add · try tomorrow 5pm, !high, #work</span>
-              )}
-            </>
-          )}
-        </div>
-        )}
-      </form>
-
       {/* Category pills */}
-      <div className="mt-4 flex items-center">
+      <div className="mt-5 flex items-center">
       <div className="min-w-0 flex-1">
       <ScrollRow className="gap-2 px-6 py-0.5">
         <Pill active={app.filter === 'all'} onClick={() => app.setFilter('all')}>
@@ -322,12 +309,12 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="hide-scrollbar mt-5 min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-6">
+      <div className="hide-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto px-6 pb-24">
         {app.visibleTasks.length === 0 ? (
           <EmptyState icon={empty.icon} title={empty.title} sub={empty.sub}>
             {app.tasks.length === 0 && !app.query && (
               <button
-                onClick={() => addRef.current?.focus()}
+                onClick={() => setAdding(true)}
                 className="press btn-acc mt-3 rounded-full px-4 py-2 text-xs font-semibold"
               >
                 Add a task
@@ -335,7 +322,23 @@ export default function Dashboard() {
             )}
           </EmptyState>
         ) : (
-          app.visibleTasks.map((t, i) => <TaskCard key={t.id} task={t} index={i} />)
+          sections.map((sec, si) => (
+            <section key={sec.key} className={si > 0 ? 'mt-5' : ''} aria-label={sec.label}>
+              {(sections.length > 1 || sec.key !== 'anytime') && (
+                <h2 className="mb-2 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: sec.tone }}>
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: sec.tone }} />
+                  {sec.label}
+                  <span className="font-medium text-mut/60">{sec.tasks.length}</span>
+                  <span className="h-px flex-1" style={{ background: `${sec.tone}26` }} />
+                </h2>
+              )}
+              <div className="space-y-2.5">
+                {sec.tasks.map((t, i) => (
+                  <TaskCard key={t.id} task={t} index={si * 2 + i} />
+                ))}
+              </div>
+            </section>
+          ))
         )}
         {app.tab === 'completed' && app.counts.completed > 0 && (
           <button
@@ -354,6 +357,21 @@ export default function Dashboard() {
           </button>
         )}
       </div>
+
+      <QuickAdd open={adding} onClose={() => setAdding(false)} />
+      <button
+        onClick={() => setAdding(a => !a)}
+        aria-label={adding ? 'Close new task' : 'New task (N)'}
+        title={adding ? 'Close' : 'New task (N)'}
+        className="press glow grad-acc absolute bottom-5 right-5 z-40 grid h-12 w-12 place-items-center rounded-full text-[#0b1a1c] shadow-[0_10px_30px_-6px_rgba(63,209,197,.6)] hover:brightness-110"
+      >
+        <Plus
+          size={22}
+          strokeWidth={2.6}
+          className="transition-transform duration-300 ease-[var(--ease-out)]"
+          style={{ transform: adding ? 'rotate(45deg)' : 'none' }}
+        />
+      </button>
     </div>
   );
 }
