@@ -11,7 +11,7 @@ export default function Toast() {
       key={toast.id}
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-4 z-[80] flex justify-center px-4 animate-[slideUp_.22s_cubic-bezier(.2,.9,.3,1.3)]"
+      className="pointer-events-none fixed inset-x-0 bottom-4 z-[80] flex justify-center px-4 animate-[slideUp_.35s_var(--ease-out)]"
     >
       <div
         className={cx(

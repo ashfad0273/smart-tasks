@@ -44,7 +44,7 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
       className={`press relative h-6 w-11 shrink-0 rounded-full transition-colors ${on ? 'grad-acc' : 'bg-line'}`}
     >
       <span
-        className={`absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 ease-[cubic-bezier(.2,.9,.3,1.4)] ${on ? 'translate-x-[22px]' : 'translate-x-0.5'}`}
+        className={`absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 ease-[var(--ease-out)] ${on ? 'translate-x-[22px]' : 'translate-x-0.5'}`}
       />
     </button>
   );

@@ -291,7 +291,7 @@ export default function Dashboard() {
           <>
             <div className="relative isolate flex flex-1 rounded-full border border-white/[.02] bg-black/15 p-1" role="tablist">
               <span
-                className="absolute inset-y-1 left-1 rounded-full bg-white/[.04] transition-transform duration-200 ease-[cubic-bezier(.2,.8,.2,1)]"
+                className="absolute inset-y-1 left-1 rounded-full bg-white/[.04] transition-transform duration-300 ease-[var(--ease-out)]"
                 style={{ width: `calc((100% - 8px) / 3)`, transform: `translateX(${tabIndex * 100}%)` }}
                 aria-hidden="true"
               />

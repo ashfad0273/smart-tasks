@@ -32,7 +32,7 @@ export default function ProgressRing({ done, total, size = 46 }: { done: number;
           strokeLinecap="round"
           strokeDasharray={c}
           strokeDashoffset={c * (1 - pct)}
-          style={{ transition: 'stroke-dashoffset .6s cubic-bezier(.2,.9,.3,1.2)' }}
+          style={{ transition: 'stroke-dashoffset .6s var(--ease-out)' }}
         />
       </svg>
       <span className={`absolute text-[11px] font-semibold ${full ? 'anim-pop text-base' : ''}`}>

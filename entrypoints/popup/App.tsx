@@ -36,7 +36,10 @@ function Root() {
   if (!app.booted) return <Splash />;
   return (
     <>
-      <Screen />
+      {/* Re-keyed per screen so every navigation fades in. */}
+      <div key={app.account ? app.screen : `out-${app.screen}`} className="anim-screen h-full">
+        <Screen />
+      </div>
       {app.account && app.editTaskId && <EditTaskSheet key={app.editTaskId} />}
       {app.switcherOpen && <SwitchAccountModal />}
       {app.categoryModal && <CategoryModal key={app.categoryModal.mode === 'edit' ? app.categoryModal.id : 'new'} />}

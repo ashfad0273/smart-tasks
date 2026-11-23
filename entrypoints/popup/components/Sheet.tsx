@@ -15,10 +15,10 @@ export default function Sheet({ onClose, label, children }: { onClose: () => voi
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={label}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] animate-[fadeIn_.15s_ease-out]" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] animate-[fadeIn_.25s_ease-out]" onClick={onClose} />
       <div
-        className="absolute inset-x-0 bottom-0 flex max-h-[94%] flex-col rounded-t-3xl border-t border-line bg-surface shadow-[0_-20px_60px_rgba(0,0,0,.5)] animate-[sheetUp_.32s_cubic-bezier(.2,.9,.3,1)]"
-        style={dy ? { transform: `translateY(${dy}px)`, transition: 'none' } : { transition: 'transform .2s' }}
+        className="absolute inset-x-0 bottom-0 flex max-h-[94%] flex-col rounded-t-3xl border-t border-line bg-surface shadow-[0_-20px_60px_rgba(0,0,0,.5)] animate-[sheetUp_.42s_var(--ease-out)]"
+        style={dy ? { transform: `translateY(${dy}px)`, transition: 'none' } : { transition: 'transform .35s var(--ease-out)' }}
       >
         <div
           className="shrink-0 cursor-grab touch-none pb-1 pt-2.5"

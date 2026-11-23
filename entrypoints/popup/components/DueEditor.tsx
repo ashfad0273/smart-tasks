@@ -29,6 +29,13 @@ const fmtDate = (ms: number) => {
 /** Due date + time editor with themed, inline pickers (no native browser popups). */
 export default function DueEditor({ value, onChange }: { value: number | null; onChange: (ms: number | null) => void }) {
   const [open, setOpen] = useState<'date' | 'time' | null>(null);
+  // The last panel shown stays rendered while it collapses, so closing animates too.
+  const [shown, setShown] = useState<'date' | 'time' | null>(null);
+  const toggle = (k: 'date' | 'time') => {
+    if (open === k) return setOpen(null);
+    setShown(k);
+    setOpen(k);
+  };
   const d = value ? new Date(value) : null;
 
   const withDay = (dayMs: number) => {
@@ -72,10 +79,10 @@ export default function DueEditor({ value, onChange }: { value: number | null; o
       </div>
 
       <div className="mt-2 flex gap-1.5">
-        <Trigger icon={<CalendarDays size={13} />} active={open === 'date'} onClick={() => setOpen(open === 'date' ? null : 'date')}>
+        <Trigger icon={<CalendarDays size={13} />} active={open === 'date'} onClick={() => toggle('date')}>
           {value ? fmtDate(value) : 'Pick a date'}
         </Trigger>
-        <Trigger icon={<Clock size={13} />} active={open === 'time'} onClick={() => setOpen(open === 'time' ? null : 'time')}>
+        <Trigger icon={<Clock size={13} />} active={open === 'time'} onClick={() => toggle('time')}>
           {d ? fmtTime(d.getHours(), d.getMinutes()) : 'Pick a time'}
         </Trigger>
         {value && (
@@ -93,16 +100,31 @@ export default function DueEditor({ value, onChange }: { value: number | null; o
         )}
       </div>
 
-      {open === 'date' && (
-        <Calendar
-          value={value}
-          onPick={ms => {
-            onChange(withDay(ms));
-            setOpen(null);
-          }}
-        />
-      )}
-      {open === 'time' && <TimePanel value={d} onPick={(h, m) => onChange(withTime(h, m))} onDone={() => setOpen(null)} />}
+      <div
+        className="expander"
+        data-open={!!open}
+        style={{ marginTop: open ? 8 : 0, scrollMarginBottom: 88 }}
+        inert={!open}
+        onTransitionEnd={e => {
+          // Once a panel has finished opening, glide it into view if it sits below the fold.
+          if (open && e.target === e.currentTarget && e.propertyName === 'grid-template-rows')
+            e.currentTarget.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }}
+      >
+        <div>
+          {shown === 'date' && (
+            <Calendar
+              key="date"
+              value={value}
+              onPick={ms => {
+                onChange(withDay(ms));
+                setOpen(null);
+              }}
+            />
+          )}
+          {shown === 'time' && <TimePanel key="time" value={d} onPick={(h, m) => onChange(withTime(h, m))} onDone={() => setOpen(null)} />}
+        </div>
+      </div>
     </div>
   );
 }
@@ -124,12 +146,13 @@ function Trigger({ icon, active, onClick, children }: { icon: React.ReactNode; a
 }
 
 function Panel({ children }: { children: React.ReactNode }) {
-  return <div className="anim-pop mt-2 rounded-2xl border border-white/[.06] bg-black/25 p-3">{children}</div>;
+  return <div className="anim-pop rounded-2xl border border-white/[.06] bg-black/25 p-3">{children}</div>;
 }
 
 function Calendar({ value, onPick }: { value: number | null; onPick: (dayMs: number) => void }) {
   const base = value ? new Date(value) : new Date();
   const [month, setMonth] = useState(() => new Date(base.getFullYear(), base.getMonth(), 1));
+  const [dir, setDir] = useState<1 | -1 | 0>(0);
   const today = startOfDay(Date.now()).getTime();
 
   const lead = (month.getDay() + 6) % 7; // Monday first
@@ -138,7 +161,11 @@ function Calendar({ value, onPick }: { value: number | null; onPick: (dayMs: num
     ...Array.from({ length: lead }, () => null),
     ...Array.from({ length: daysIn }, (_, i) => new Date(month.getFullYear(), month.getMonth(), i + 1).getTime()),
   ];
-  const shift = (n: number) => setMonth(m => new Date(m.getFullYear(), m.getMonth() + n, 1));
+  const shift = (n: 1 | -1) => {
+    setDir(n);
+    setMonth(m => new Date(m.getFullYear(), m.getMonth() + n, 1));
+  };
+  const slide = dir === 1 ? 'anim-slide-l' : dir === -1 ? 'anim-slide-r' : '';
 
   return (
     <Panel>
@@ -146,17 +173,19 @@ function Calendar({ value, onPick }: { value: number | null; onPick: (dayMs: num
         <button onClick={() => shift(-1)} aria-label="Previous month" className="press rounded-lg p-1 text-mut hover:bg-white/[.05] hover:text-txt">
           <ChevronLeft size={15} />
         </button>
-        <span className="text-[13px] font-medium">{month.toLocaleDateString([], { month: 'long', year: 'numeric' })}</span>
+        <span key={month.getTime()} className={cx('text-[13px] font-medium', slide)}>{month.toLocaleDateString([], { month: 'long', year: 'numeric' })}</span>
         <button onClick={() => shift(1)} aria-label="Next month" className="press rounded-lg p-1 text-mut hover:bg-white/[.05] hover:text-txt">
           <ChevronRight size={15} />
         </button>
       </div>
-      <div className="grid grid-cols-7 gap-0.5 text-center">
+      <div className="grid grid-cols-7 gap-0.5 pb-1 text-center">
         {WEEK.map(w => (
-          <span key={w} className="pb-1 text-[10.5px] font-medium text-mut/70">
+          <span key={w} className="text-[10.5px] font-medium text-mut/70">
             {w}
           </span>
         ))}
+      </div>
+      <div key={month.getTime()} className={cx('grid grid-cols-7 gap-0.5 text-center', slide)}>
         {cells.map((ms, i) =>
           ms === null ? (
             <span key={`e${i}`} />
@@ -220,7 +249,12 @@ function TimePanel({ value, onPick, onDone }: { value: Date | null; onPick: (h: 
         <NumField label="Hour" value={h12} min={1} max={12} wrap onChange={h => onPick(to24(h, pm), min)} />
         <span className="text-lg text-mut">:</span>
         <NumField label="Minute" value={min} min={0} max={59} pad wrap onChange={m => onPick(h24, m)} />
-        <div className="ml-auto flex h-10 rounded-xl border border-white/[.06] bg-black/20 p-1">
+        <div className="relative ml-auto grid h-10 grid-cols-2 rounded-xl border border-white/[.06] bg-black/20 p-1">
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-lg border border-acc/40 bg-acc/10 transition-transform duration-300 ease-[var(--ease-out)]"
+            style={{ transform: pm ? 'translateX(100%)' : 'none' }}
+          />
           {(['AM', 'PM'] as const).map(ap => {
             const on = (ap === 'PM') === pm;
             return (
@@ -228,10 +262,7 @@ function TimePanel({ value, onPick, onDone }: { value: Date | null; onPick: (h: 
                 key={ap}
                 onClick={() => !on && onPick(to24(h12, ap === 'PM'), min)}
                 aria-pressed={on}
-                className={cx(
-                  'press rounded-lg border px-3 text-[12px] font-semibold transition-colors',
-                  on ? 'border-acc/40 bg-acc/10 text-acc' : 'border-transparent text-mut hover:text-txt',
-                )}
+                className={cx('press relative z-10 rounded-lg px-3 text-[12px] font-semibold', on ? 'text-acc' : 'text-mut hover:text-txt')}
               >
                 {ap}
               </button>
@@ -248,7 +279,7 @@ function TimePanel({ value, onPick, onDone }: { value: Date | null; onPick: (h: 
         ))}
       </div>
 
-      <button onClick={onDone} className="press btn-acc mt-3 w-full rounded-full py-2 text-[12.5px] font-semibold">
+      <button onClick={onDone} className="press btn-acc mt-3 tabular-nums w-full rounded-full py-2 text-[12.5px] font-semibold">
         Set {fmtTime(h24, min)}
       </button>
     </Panel>
