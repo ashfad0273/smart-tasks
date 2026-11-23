@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bell, ChevronLeft, Download, Keyboard, LogOut, Pencil, RefreshCw, Trash2, Users } from 'lucide-react';
+import { Bell, ChevronLeft, Download, Keyboard, LogOut, Pencil, RefreshCw, Tags, Trash2, Users } from 'lucide-react';
 import { API_URL } from '../../../lib/api';
 import { manifestVersion, onStorageChange, storageGet, storageSet } from '../../../lib/ext';
 import { REMINDERS_ENABLED_KEY, REMINDERS_KEY } from '../../../lib/keys';
@@ -191,6 +191,11 @@ export default function SettingsScreen() {
             sub={remindersOn && nextReminder ? `Next: ${formatDue(nextReminder.dueAt).label}` : undefined}
           >
             {remindersOn !== null && <Toggle label="Reminders" on={remindersOn} onChange={v => void toggleReminders(v)} />}
+          </Row>
+          <Row icon={<Tags size={14} />} label="Categories">
+            <button onClick={() => app.setScreen('categories')} className="press text-[12px] font-medium text-acc hover:underline">
+              Manage
+            </button>
           </Row>
           <Row icon={<Download size={14} />} label="Export data">
             <button onClick={() => void app.exportData()} className="press text-[12px] font-medium text-acc hover:underline">
