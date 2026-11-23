@@ -1,0 +1,24 @@
+# dependencies & build output
+node_modules/
+.output/
+.wxt/
+build/
+build.zip
+*.zip
+stats.html
+
+# secrets — never commit
+key.pem
+key.b64
+*.pem
+.env
+.env.*
+!.env.example
+.dev.vars
+
+# cloudflare
+worker/.wrangler/
+
+# misc
+*.log
+.DS_Store

@@ -1,0 +1,41 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "smart-tasks-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "observability": { "enabled": true },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "smart-tasks",
+      "database_id": "3c29ac64-5a58-411a-91a2-a01e246fdeba",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // One Durable Object per user: stores that user's tasks/categories in its
+  // own SQLite database and fans changes out to every open device over
+  // hibernatable WebSockets.
+  "durable_objects": {
+    "bindings": [{ "name": "USER_HUB", "class_name": "UserHub" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserHub"] }],
+
+  // Brute-force protection for the auth endpoints (per IP + route).
+  "ratelimits": [
+    { "name": "AUTH_LIMITER", "namespace_id": "4201", "simple": { "limit": 10, "period": 60 } }
+  ],
+
+  "vars": {
+    // Optional: Google OAuth "Web application" client ID. Leave empty to hide
+    // the Google button. The extension reads it from GET /v1/config.
+    "GOOGLE_CLIENT_ID": "",
+    // Optional: sender for password-reset codes. Needs Cloudflare Email
+    // Sending enabled on the domain AND the send_email binding below.
+    "EMAIL_FROM": ""
+  }
+
+  // Uncomment once `wrangler email sending enable yourdomain.com` succeeded:
+  // "send_email": [{ "name": "EMAIL" }]
+}

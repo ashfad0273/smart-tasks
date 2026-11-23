@@ -1,0 +1,236 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0f17;
+  --color-surface: #121927;
+  --color-surface2: #1a2333;
+  --color-line: #243044;
+  --color-txt: #eef2f8;
+  --color-mut: #8f9bb0;
+  --color-acc: #22c55e;
+  --color-accdark: #16a34a;
+  --color-acc2: #2dd4bf;
+  --color-pop: #a78bfa;
+  --color-sun: #facc15;
+  --color-danger: #f43f5e;
+  --color-warn: #f59e0b;
+  --font-sans: "Nunito Variable", "Nunito", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 380px;
+  height: 600px;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-txt);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+}
+
+/* Opened in a full tab (e.g. from a notification): center the "phone". */
+@media (min-width: 500px) {
+  body {
+    width: 100%;
+    height: 100vh;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(circle at 30% 20%, #12301f 0, transparent 40%), var(--color-bg);
+  }
+  #root {
+    width: 380px;
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--color-line);
+  }
+}
+
+#root {
+  height: 600px;
+  position: relative;
+  overflow: clip;
+}
+
+
+/* Soft ambient blobs behind every screen. */
+.ambient::before,
+.ambient::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border-radius: 9999px;
+  filter: blur(60px);
+  opacity: 0.22;
+  z-index: 0;
+}
+.ambient::before {
+  width: 220px;
+  height: 220px;
+  top: -90px;
+  right: -70px;
+  background: var(--color-acc);
+  animation: drift 14s ease-in-out infinite alternate;
+}
+.ambient::after {
+  width: 180px;
+  height: 180px;
+  bottom: -80px;
+  left: -60px;
+  background: var(--color-pop);
+  animation: drift 18s ease-in-out infinite alternate-reverse;
+}
+.ambient > * {
+  position: relative;
+  z-index: 1;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 140, 170, 0.25);
+  border-radius: 9999px;
+}
+
+input[type="date"],
+input[type="time"] {
+  color-scheme: dark;
+}
+
+/* Keyboard users always see where they are. */
+:focus-visible {
+  outline: 2px solid var(--color-acc);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
+/* Tactile buttons. */
+.press {
+  transition: transform 0.12s ease, background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, opacity 0.15s;
+}
+.press:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideUp {
+  from { transform: translateY(28px); opacity: 0.5; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes sheetUp {
+  0% { transform: translateY(100%); }
+  70% { transform: translateY(-6px); }
+  100% { transform: translateY(0); }
+}
+@keyframes popIn {
+  0% { transform: scale(0.9); opacity: 0; }
+  60% { transform: scale(1.03); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes cardIn {
+  from { transform: translateY(10px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+@keyframes bob {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-8px) rotate(3deg); }
+}
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-10deg); }
+  75% { transform: rotate(10deg); }
+}
+@keyframes checkPop {
+  0% { transform: scale(0.4); }
+  60% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+@keyframes burst {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(0.2) rotate(var(--rot)); opacity: 0; }
+}
+@keyframes fall {
+  0% { transform: translate3d(0, -20px, 0) rotate(0); opacity: 1; }
+  100% { transform: translate3d(var(--dx), 640px, 0) rotate(var(--rot)); opacity: 0.9; }
+}
+@keyframes drift {
+  from { transform: translate(0, 0); }
+  to { transform: translate(-30px, 40px); }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+@keyframes shimmer {
+  from { background-position: -200px 0; }
+  to { background-position: 200px 0; }
+}
+
+.anim-card { animation: cardIn 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+.anim-pop { animation: popIn 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.3) both; }
+.anim-bob { animation: bob 3s ease-in-out infinite; }
+.anim-check { animation: checkPop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.4); }
+.anim-shake { animation: shake 0.35s ease; }
+.hover-wiggle:hover { animation: wiggle 0.4s ease; }
+
+.glow {
+  box-shadow: 0 6px 22px -6px rgba(34, 197, 94, 0.55);
+}
+.grad-acc {
+  background: linear-gradient(135deg, #22c55e 0%, #2dd4bf 100%);
+}
+.grad-text {
+  background: linear-gradient(90deg, #4ade80, #2dd4bf 50%, #a78bfa);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--color-surface) 0, var(--color-surface2) 50%, var(--color-surface) 100%);
+  background-size: 400px 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+
+.hide-scrollbar {
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
