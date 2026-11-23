@@ -19,7 +19,7 @@ import {
 import type { AccountInfo, Category, DataSet, Registry, SyncOp, SyncState, SyncStatus, Task, TaskPatch } from '../../../lib/types';
 import { cheer, descErr, friendlyAuthError, hueFromString } from '../../../lib/utils';
 
-export type Screen = 'welcome' | 'login' | 'signup' | 'reset' | 'dashboard' | 'categories' | 'settings' | 'agent';
+export type Screen = 'welcome' | 'login' | 'signup' | 'reset' | 'dashboard' | 'categories' | 'settings' | 'agent' | 'devices';
 export type Tab = 'all' | 'pending' | 'completed';
 export type ToastKind = 'info' | 'error' | 'success';
 export interface Toast {
@@ -264,6 +264,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ws.onclose = ev => {
         if (pingTimer) clearInterval(pingTimer);
         if (closed || ev.code === 4001) return;
+        // Signed out from another device: one sync surfaces the "sign in again" banner.
+        if (ev.code === 4003) return void sync(acc);
         retry++;
         retryTimer = setTimeout(connect, Math.min(30_000, 1000 * 2 ** Math.min(retry, 5)));
       };

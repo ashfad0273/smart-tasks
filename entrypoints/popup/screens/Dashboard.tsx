@@ -209,7 +209,7 @@ export default function Dashboard() {
           onClick={app.startAddAccount}
           className="press mx-6 mt-4 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-left text-[11px] font-semibold leading-relaxed text-[#fda4af]"
         >
-          Your session for {acc.email} expired. Tap to sign in again — your offline changes are kept.
+          {acc.email} was signed out on this device. Tap to sign in again; your offline changes are kept.
         </button>
       )}
       {acc?.local && (

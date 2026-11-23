@@ -52,6 +52,20 @@ export interface ServerConfig {
   passwordReset: boolean;
 }
 
+export interface DeviceSession {
+  id: string;
+  device: string;
+  location: string | null;
+  createdAt: number;
+  lastSeen: number;
+  current: boolean;
+  online: boolean;
+}
+export interface SessionsResult {
+  sessions: DeviceSession[];
+  agent: { hint: string; createdAt: number; lastUsed: number | null } | null;
+}
+
 const post = (body: unknown) => ({ method: 'POST', body: JSON.stringify(body) });
 
 export const api = {
@@ -73,5 +87,8 @@ export const api = {
     call<{ token: { hint: string; createdAt: number; lastUsed: number | null } | null }>('/v1/agent-token', { token }),
   createAgentToken: (token: string, timeZone: string) => call<{ token: string }>('/v1/agent-token', { ...post({ timeZone }), token }),
   revokeAgentToken: (token: string) => call<{ ok: true }>('/v1/agent-token', { method: 'DELETE', token }),
+  sessions: (token: string) => call<SessionsResult>('/v1/sessions', { token }),
+  signOutDevice: (token: string, id: string) => call<{ ok: true }>(`/v1/sessions/${encodeURIComponent(id)}`, { method: 'DELETE', token }),
+  signOutOthers: (token: string) => call<{ ok: true; signedOut: number }>('/v1/sessions?others=1', { method: 'DELETE', token }),
   wsUrl: (token: string) => `${API_URL.replace(/^http/, 'ws')}/v1/ws?token=${encodeURIComponent(token)}`,
 };

@@ -122,6 +122,26 @@ export class UserHub extends DurableObject<Env> {
     return { rev };
   }
 
+  /** Session ids with an open live connection right now. */
+  online(): string[] {
+    const ids = new Set<string>();
+    for (const ws of this.ctx.getWebSockets()) for (const t of this.ctx.getTags(ws)) ids.add(t);
+    return [...ids];
+  }
+
+  /** Disconnect the given sessions (they were just signed out). */
+  kick(sessionIds: string[]): void {
+    for (const id of sessionIds) {
+      for (const ws of this.ctx.getWebSockets(id)) {
+        try {
+          ws.close(4003, 'signed out');
+        } catch {
+          /* already closed */
+        }
+      }
+    }
+  }
+
   /** Account deletion: drop everything and disconnect devices. */
   async wipe(): Promise<void> {
     for (const ws of this.ctx.getWebSockets()) {
@@ -150,7 +170,10 @@ export class UserHub extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected WebSocket', { status: 426 });
     const { 0: client, 1: server } = new WebSocketPair();
-    this.ctx.acceptWebSocket(server);
+    // Tag the socket with its session so the device list can show who's online
+    // and a signed-out device can be disconnected immediately.
+    const sid = request.headers.get('X-Session-Id');
+    this.ctx.acceptWebSocket(server, sid ? [sid] : []);
     server.send(JSON.stringify({ type: 'rev', rev: this.rev() }));
     return new Response(null, { status: 101, webSocket: client });
   }

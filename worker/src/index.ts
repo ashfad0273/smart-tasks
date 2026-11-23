@@ -24,6 +24,9 @@ export { UserHub } from './hub';
  *   GET    /v1/agent-token            → {token: {hint, createdAt, lastUsed} | null}
  *   POST   /v1/agent-token            {timeZone} → {token: "stk_…"}  (replaces any old one)
  *   DELETE /v1/agent-token            revoke
+ *   GET    /v1/sessions               → {sessions: [{id, device, location, createdAt, lastSeen, current, online}], agent}
+ *   DELETE /v1/sessions/:id           sign that device out
+ *   DELETE /v1/sessions?others=1      sign out every other device
  *   POST   /mcp                       MCP endpoint for AI agents (Bearer stk_… token)
  */
 
@@ -80,30 +83,86 @@ async function rateLimit(env: Env, req: Request, route: string): Promise<void> {
   if (!success) throw new HttpError(429, 'too-many-requests', 'Too many attempts — wait a minute and try again.');
 }
 
-async function createSession(env: Env, userId: string): Promise<string> {
+/** "Chrome on macOS" from a User-Agent string. */
+function deviceName(ua: string | null): string {
+  if (!ua) return 'Unknown device';
+  const browser = /Edg\//.test(ua)
+    ? 'Edge'
+    : /OPR\/|Opera/.test(ua)
+      ? 'Opera'
+      : /Firefox\//.test(ua)
+        ? 'Firefox'
+        : /Chrome\//.test(ua)
+          ? 'Chrome'
+          : /Safari\//.test(ua)
+            ? 'Safari'
+            : 'Browser';
+  const os = /Windows/.test(ua)
+    ? 'Windows'
+    : /CrOS/.test(ua)
+      ? 'ChromeOS'
+      : /Android/.test(ua)
+        ? 'Android'
+        : /iPhone|iPad/.test(ua)
+          ? 'iOS'
+          : /Mac OS X|Macintosh/.test(ua)
+            ? 'macOS'
+            : /Linux/.test(ua)
+              ? 'Linux'
+              : '';
+  return os ? `${browser} on ${os}` : browser;
+}
+
+function locationOf(req: Request): string | null {
+  const cf = (req as Request & { cf?: { city?: string; country?: string } }).cf;
+  if (!cf) return null;
+  return [cf.city, cf.country].filter(Boolean).join(', ') || null;
+}
+
+const newSessionId = () => randomToken(9);
+
+async function createSession(env: Env, userId: string, req?: Request): Promise<string> {
   const token = randomToken();
   const now = Date.now();
-  await env.DB.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at, last_seen) VALUES (?, ?, ?, ?, ?)')
-    .bind(await sha256(token), userId, now, now + SESSION_TTL, now)
+  await env.DB.prepare(
+    'INSERT INTO sessions (token_hash, user_id, created_at, expires_at, last_seen, id, device, location) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+  )
+    .bind(
+      await sha256(token),
+      userId,
+      now,
+      now + SESSION_TTL,
+      now,
+      newSessionId(),
+      req ? deviceName(req.headers.get('User-Agent')) : null,
+      req ? locationOf(req) : null,
+    )
     .run();
   return token;
 }
 
-async function authenticate(env: Env, token: string | null): Promise<UserRow> {
+type Authed = UserRow & { session_id: string };
+
+async function authenticate(env: Env, token: string | null, req?: Request): Promise<Authed> {
   if (!token) throw new HttpError(401, 'unauthenticated', 'Sign in required');
   const hash = await sha256(token);
   const row = await env.DB.prepare(
-    `SELECT u.*, s.expires_at, s.last_seen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`,
+    `SELECT u.*, s.expires_at, s.last_seen, s.id AS session_id, s.device FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`,
   )
     .bind(hash)
-    .first<UserRow & { expires_at: number; last_seen: number }>();
+    .first<Authed & { expires_at: number; last_seen: number; device: string | null }>();
   const now = Date.now();
   if (!row || row.expires_at < now) throw new HttpError(401, 'session-expired', 'Your session expired — please sign in again.');
-  if (now - row.last_seen > 86_400_000) {
-    // Sliding expiry, written at most once a day.
-    await env.DB.prepare('UPDATE sessions SET last_seen = ?, expires_at = ? WHERE token_hash = ?')
-      .bind(now, now + SESSION_TTL, hash)
+  if (now - row.last_seen > 5 * 60_000 || !row.device || !row.session_id) {
+    // "Last active" + sliding expiry, written at most every few minutes.
+    // Sessions from before the device list get their name/id filled in here.
+    const id = row.session_id || newSessionId();
+    await env.DB.prepare(
+      'UPDATE sessions SET last_seen = ?, expires_at = ?, id = ?, device = COALESCE(device, ?), location = COALESCE(location, ?) WHERE token_hash = ?',
+    )
+      .bind(now, now + SESSION_TTL, id, req ? deviceName(req.headers.get('User-Agent')) : null, req ? locationOf(req) : null, hash)
       .run();
+    row.session_id = id;
   }
   return row;
 }
@@ -169,7 +228,7 @@ async function signup(req: Request, env: Env): Promise<Response> {
   await env.DB.prepare('INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
     .bind(user.id, user.email, user.name, user.password_hash, Date.now())
     .run();
-  return json({ token: await createSession(env, user.id), user: publicUser(user), created: true });
+  return json({ token: await createSession(env, user.id, req), user: publicUser(user), created: true });
 }
 
 async function login(req: Request, env: Env): Promise<Response> {
@@ -184,7 +243,7 @@ async function login(req: Request, env: Env): Promise<Response> {
     }
     throw new HttpError(401, 'invalid-credential', 'Incorrect email or password.');
   }
-  return json({ token: await createSession(env, user.id), user: publicUser(user) });
+  return json({ token: await createSession(env, user.id, req), user: publicUser(user) });
 }
 
 async function google(req: Request, env: Env): Promise<Response> {
@@ -215,7 +274,7 @@ async function google(req: Request, env: Env): Promise<Response> {
       .run();
     user = { ...user, google_sub: claims.sub, photo_url: claims.picture ?? user.photo_url };
   }
-  return json({ token: await createSession(env, user.id), user: publicUser(user), created });
+  return json({ token: await createSession(env, user.id, req), user: publicUser(user), created });
 }
 
 async function resetRequest(req: Request, env: Env): Promise<Response> {
@@ -265,7 +324,7 @@ async function resetConfirm(req: Request, env: Env): Promise<Response> {
     env.DB.prepare('DELETE FROM reset_codes WHERE user_id = ?').bind(user.id),
     env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id), // sign out everywhere
   ]);
-  return json({ token: await createSession(env, user.id), user: publicUser(user) });
+  return json({ token: await createSession(env, user.id, req), user: publicUser(user) });
 }
 
 async function route(req: Request, env: Env): Promise<Response> {
@@ -298,12 +357,14 @@ async function route(req: Request, env: Env): Promise<Response> {
   // WebSocket: browsers can't set headers on WS, so the token rides in the query.
   if (p === '/v1/ws') {
     if (req.headers.get('Upgrade') !== 'websocket') throw new HttpError(426, 'upgrade-required', 'Expected WebSocket');
-    const user = await authenticate(env, url.searchParams.get('token'));
-    return hub(env, user.id).fetch(new Request('https://hub/ws', { headers: req.headers }));
+    const user = await authenticate(env, url.searchParams.get('token'), req);
+    const headers = new Headers(req.headers);
+    headers.set('X-Session-Id', user.session_id);
+    return hub(env, user.id).fetch(new Request('https://hub/ws', { headers }));
   }
 
   const token = bearer(req);
-  const user = await authenticate(env, token);
+  const user = await authenticate(env, token, req);
 
   if (p === '/v1/auth/logout' && m === 'POST') {
     await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256(token!)).run();
@@ -328,6 +389,46 @@ async function route(req: Request, env: Env): Promise<Response> {
       ]);
       return json({ ok: true });
     }
+  }
+  if (p === '/v1/sessions' && m === 'GET') {
+    const [{ results }, agent, online] = await Promise.all([
+      env.DB.prepare('SELECT id, device, location, created_at, last_seen FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY last_seen DESC')
+        .bind(user.id, Date.now())
+        .all<{ id: string; device: string | null; location: string | null; created_at: number; last_seen: number }>(),
+      env.DB.prepare('SELECT hint, created_at, last_used FROM agent_tokens WHERE user_id = ?')
+        .bind(user.id)
+        .first<{ hint: string; created_at: number; last_used: number | null }>(),
+      hub(env, user.id).online(),
+    ]);
+    const live = new Set(online);
+    return json({
+      sessions: results.map(r => ({
+        id: r.id,
+        device: r.device ?? 'Unknown device',
+        location: r.location,
+        createdAt: r.created_at,
+        lastSeen: r.last_seen,
+        current: r.id === user.session_id,
+        online: live.has(r.id),
+      })),
+      agent: agent ? { hint: agent.hint, createdAt: agent.created_at, lastUsed: agent.last_used } : null,
+    });
+  }
+  if (p === '/v1/sessions' && m === 'DELETE' && url.searchParams.get('others') === '1') {
+    const { results } = await env.DB.prepare('SELECT id FROM sessions WHERE user_id = ? AND id != ?')
+      .bind(user.id, user.session_id)
+      .all<{ id: string }>();
+    await env.DB.prepare('DELETE FROM sessions WHERE user_id = ? AND id != ?').bind(user.id, user.session_id).run();
+    await hub(env, user.id).kick(results.map(r => r.id));
+    return json({ ok: true, signedOut: results.length });
+  }
+  const sm = p.match(/^\/v1\/sessions\/([A-Za-z0-9_-]{6,40})$/);
+  if (sm && m === 'DELETE') {
+    if (sm[1] === user.session_id) throw new HttpError(400, 'current-session', 'Use Sign out for this device.');
+    const r = await env.DB.prepare('DELETE FROM sessions WHERE user_id = ? AND id = ?').bind(user.id, sm[1]).run();
+    if (!r.meta.changes) throw new HttpError(404, 'not-found', 'That device is already signed out.');
+    await hub(env, user.id).kick([sm[1]]);
+    return json({ ok: true });
   }
   if (p === '/v1/agent-token') {
     if (m === 'GET') {
