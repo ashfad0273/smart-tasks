@@ -7,8 +7,10 @@ import Burst from './Burst';
 
 export default function TaskCard({ task, index }: { task: Task; index: number }) {
   const app = useApp();
-  // Inside a category's own filter the chip says nothing new, so hide it there.
-  const cat = app.filter === task.categoryId ? null : app.categoryById(task.categoryId);
+  const cat = app.categoryById(task.categoryId);
+  // Inside a category's own filter the chip says nothing new, so it folds away there.
+  const showCat = !!cat && app.filter !== task.categoryId;
+  const hasMeta = showCat || !!task.dueAt || !!task.url;
   const due = task.dueAt ? formatDue(task.dueAt) : null;
   const done = !!task.completedAt;
   const doneSubs = task.subtasks.filter(s => s.done).length;
@@ -45,9 +47,9 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
   return (
     <div
       className={cx(
-        'anim-card group relative flex items-start gap-3 overflow-hidden border border-white/[.04] bg-white/[.015] px-4 py-3.5 transition-colors duration-200',
+        'anim-card group relative flex items-start gap-3 overflow-hidden border border-white/[.04] bg-white/[.015] px-4 py-3.5 transition-[background-color,border-radius] duration-300',
         // Single-line cards (no chips row) get a tighter corner so they don't look like pills.
-        cat || due || task.url ? 'rounded-xl' : 'rounded-lg',
+        hasMeta ? 'rounded-xl' : 'rounded-lg',
         'hover:bg-white/[.03] focus-within:bg-white/[.03]',
       )}
       style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
@@ -125,12 +127,17 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
           </button>
         )}
 
-        {(cat || due || task.url) && (
-          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
+        {/* Chips row folds open/closed smoothly instead of popping. */}
+        <div className="expander" data-open={hasMeta} style={{ marginTop: hasMeta ? 8 : 0 }} inert={!hasMeta}>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
             {cat && (
               <button
                 onClick={() => app.setFilter(cat.id)}
-                className="press inline-flex max-w-[120px] items-center gap-1 rounded-full px-2 py-0.5"
+                inert={!showCat}
+                className={cx(
+                  'press inline-flex items-center gap-1 overflow-hidden whitespace-nowrap rounded-full py-0.5 transition-[max-width,opacity,padding,margin,transform] duration-300 ease-[var(--ease-out)]',
+                  showCat ? 'max-w-[120px] px-2 opacity-100' : '-mr-1.5 max-w-0 scale-90 px-0 opacity-0',
+                )}
                 style={{ background: `${cat.color}22`, color: cat.color }}
                 title={`Show only ${cat.name}`}
               >
@@ -156,7 +163,7 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
               </a>
             )}
           </div>
-        )}
+        </div>
       </div>
 
       <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-md bg-surface/95 opacity-0 shadow-[0_0_12px_8px_var(--color-surface)] transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
