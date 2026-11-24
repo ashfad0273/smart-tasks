@@ -174,10 +174,12 @@ if (!Object.keys(platforms).length) {
 // It stays out of this version's latest.json, so Mac apps just stay on their version
 // (listing the older build there would make them "update" to it again and again).
 if (Object.keys(platforms).length && !dl.mac) {
-  const live = await fetch(`${SITE}/desktop/latest.json`, { cache: 'no-store' })
-    .then(r => (r.ok ? r.json() : null))
-    .catch(() => null);
-  const v = live?.platforms?.['darwin-aarch64'] && live.version;
+  // Read the Mac link off the live download page: latest.json leaves Mac out
+  // after a Windows-only release, so it can't tell us on the next one.
+  const page = await fetch(`${SITE}/`, { cache: 'no-store' })
+    .then(r => (r.ok ? r.text() : ''))
+    .catch(() => '');
+  const v = page.match(/\/desktop\/smart-tasks-([\d.]+)-mac\.dmg/)?.[1];
   const r = v && (await fetch(`${SITE}/desktop/smart-tasks-${v}-mac.dmg`).catch(() => null));
   if (r?.ok) {
     const buf = Buffer.from(await r.arrayBuffer());
