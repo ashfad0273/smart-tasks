@@ -23,7 +23,9 @@ import { cheer, descErr, friendlyAuthError, hueFromString } from '../../../lib/u
 export type Screen = 'welcome' | 'login' | 'signup' | 'reset' | 'dashboard' | 'categories' | 'settings' | 'agent' | 'devices' | 'activity' | 'archive' | 'notifications';
 export type Tab = 'all' | 'pending' | 'completed';
 /** Smart lists (desktop sidebar): every task, due today or overdue, or due later. */
-export type ListView = 'all' | 'today' | 'upcoming';
+export type ListView = 'all' | 'today' | 'upcoming' | 'ai';
+/** Tasks an AI agent wrote, or that you handed to one. */
+export const isFromAi = (t: Task) => !!t.source || !!t.aiRequest;
 /** due = by due date in Overdue/Today/... groups (default). */
 export type SortBy = 'due' | 'updated' | 'added' | 'priority';
 export type ToastKind = 'info' | 'error' | 'success';
@@ -103,7 +105,7 @@ interface AppCtx {
   list: ListView;
   setList(l: ListView): void;
   /** Open-task counts for the sidebar's smart lists (ignore the category filter). */
-  listCounts: { all: number; today: number; upcoming: number; completed: number };
+  listCounts: { all: number; today: number; upcoming: number; ai: number; completed: number };
   visibleTasks: Task[];
   categoryById(id: string | null): Category | null;
   counts: { total: number; pending: number; completed: number; doneToday: number; dueToday: number };
@@ -786,7 +788,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       t =>
         (filter === 'all' || (filter === 'none' ? !t.categoryId : t.categoryId === filter)) &&
         (list === 'all' ||
-          (list === 'today' ? t.dueAt != null && t.dueAt <= endOfToday : t.dueAt != null && t.dueAt > endOfToday)) &&
+          (list === 'ai'
+            ? isFromAi(t)
+            : list === 'today'
+              ? t.dueAt != null && t.dueAt <= endOfToday
+              : t.dueAt != null && t.dueAt > endOfToday)) &&
         (!q || t.title.toLowerCase().includes(q) || t.subtasks.some(s => s.title.toLowerCase().includes(q))),
     );
   }, [tasks, filter, query, list]);
@@ -798,6 +804,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       all: open.length,
       today: open.filter(t => t.dueAt != null && t.dueAt <= endOfToday).length,
       upcoming: open.filter(t => t.dueAt != null && t.dueAt > endOfToday).length,
+      ai: open.filter(isFromAi).length,
       completed: tasks.length - open.length,
     };
   }, [tasks]);

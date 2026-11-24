@@ -762,6 +762,8 @@ function WideHeader({
       ? 'Today'
       : app.list === 'upcoming'
         ? 'Upcoming'
+        : app.list === 'ai'
+          ? 'From AI'
         : app.tab === 'completed'
           ? 'Completed'
           : 'All tasks';

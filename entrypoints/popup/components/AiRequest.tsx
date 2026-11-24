@@ -45,7 +45,9 @@ export function AiPanel({ task }: { task: Task }) {
   const [answer, setAnswer] = useState('');
   const set = (aiRequest: Task['aiRequest']) => void app.updateTask(task.id, { aiRequest });
   const send = () => {
-    set({ status: 'approved', at: Date.now(), by: null, session: null, note: null, reply: answer.trim() || null });
+    const aiRequest = { status: 'approved' as const, at: Date.now(), by: null, session: null, note: null, reply: answer.trim() || null };
+    // Sending a finished task again reopens it: agents only pick up open tasks.
+    void app.updateTask(task.id, task.completedAt ? { aiRequest, completedAt: null } : { aiRequest });
     setAnswer('');
   };
   const from = task.source ? `${task.source.agent}${task.source.session ? ' (same session first)' : ''}` : 'any connected agent';

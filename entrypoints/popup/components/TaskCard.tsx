@@ -15,7 +15,7 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
   // Inside a category's own filter the chip says nothing new, so it folds away there.
   const showCat = !!cat && app.filter !== task.categoryId;
   const done = !!task.completedAt;
-  const ai = canSendToAi(task) || task.aiRequest?.status === 'done';
+  const ai = canSendToAi(task) || !!task.aiRequest;
   const hasMeta = showCat || !!task.dueAt || !!task.url || done || ai;
   const due = task.dueAt ? formatDue(task.dueAt) : null;
   const doneSubs = task.subtasks.filter(s => s.done).length;

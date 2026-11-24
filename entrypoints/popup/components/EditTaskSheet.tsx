@@ -137,6 +137,24 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
   const listRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ from: number; y: number } | null>(null);
 
+  // Changes that arrive from elsewhere (an AI agent, another device) while the editor is
+  // open: take them for every field you haven't edited, so autosave doesn't write the old
+  // value back over them.
+  const seen = useRef(task);
+  useEffect(() => {
+    const prev = seen.current;
+    seen.current = task;
+    if (!task || !prev || prev.id !== task.id || prev === task) return;
+    if (task.title !== prev.title && title.trim() === prev.title) setTitle(task.title);
+    if ((task.notes || null) !== (prev.notes || null) && (notes.trim() || null) === (prev.notes || null)) setNotes(task.notes ?? '');
+    if (task.categoryId !== prev.categoryId && categoryId === prev.categoryId) setCategoryId(task.categoryId);
+    if (task.priority !== prev.priority && priority === prev.priority) setPriority(task.priority);
+    if (task.dueAt !== prev.dueAt && dueAt === prev.dueAt) setDueAt(task.dueAt);
+    const subs = JSON.stringify(task.subtasks);
+    if (subs !== JSON.stringify(prev.subtasks) && JSON.stringify(subtasks) === JSON.stringify(prev.subtasks)) setSubtasks(task.subtasks.map(s => ({ ...s })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task]);
+
   // Autosave: only fields that differ from the stored task are written, shortly
   // after the user stops typing, and immediately when the sheet closes.
   const buildPatch = useCallback(() => {
@@ -300,7 +318,7 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
             <span className="truncate">{task.url.replace(/^https?:\/\//, '')}</span>
           </a>
         )}
-        {(canSendToAi(task) || task.aiRequest?.status === 'done') && <AiPanel task={task} />}
+        {(canSendToAi(task) || !!task.aiRequest) && <AiPanel task={task} />}
 
         <Section label="Category">
           <div className="flex flex-wrap gap-1.5">

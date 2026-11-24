@@ -233,6 +233,15 @@ export default function Sidebar() {
           active={isList('upcoming')}
           onClick={() => go({ list: 'upcoming' })}
         />
+        {(app.listCounts.ai > 0 || isList('ai')) && (
+          <NavItem
+            icon={<Bot size={15} />}
+            label="From AI"
+            count={app.listCounts.ai}
+            active={isList('ai')}
+            onClick={() => go({ list: 'ai' })}
+          />
+        )}
         <NavItem
           icon={<CheckCheck size={15} />}
           label="Completed"
