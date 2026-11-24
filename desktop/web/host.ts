@@ -17,6 +17,12 @@ import { loadRegistry, sync, activeAccount } from '../../lib/store';
 import { currentVersion, newer, type UpdateInfo } from '../../lib/updater';
 import { badge, inTauri } from './shim';
 
+/** What the desktop app offers the shared UI (see lib/desktop.ts). */
+interface DesktopHost {
+  getAutostart(): Promise<boolean>;
+  setAutostart(on: boolean): Promise<boolean>;
+}
+
 /* ── badge ──────────────────────────────────────────────────────────────── */
 
 const SIZE = 32;
@@ -173,6 +179,12 @@ export function startHost() {
   });
 
   if (!inTauri) return; // plain browser (layout checks): no tray, no updater
+
+  // Settings → "Open at login" talks to the app through this.
+  (globalThis as { __ST_HOST__?: DesktopHost }).__ST_HOST__ = {
+    getAutostart: () => invoke<boolean>('get_autostart'),
+    setAutostart: (on: boolean) => invoke<boolean>('set_autostart', { on }),
+  };
 
   void listen('tray-sync', async () => {
     const acc = await activeAccount();

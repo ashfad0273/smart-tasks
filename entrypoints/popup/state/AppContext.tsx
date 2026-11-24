@@ -22,6 +22,8 @@ import { cheer, descErr, friendlyAuthError, hueFromString } from '../../../lib/u
 
 export type Screen = 'welcome' | 'login' | 'signup' | 'reset' | 'dashboard' | 'categories' | 'settings' | 'agent' | 'devices' | 'activity' | 'archive' | 'notifications';
 export type Tab = 'all' | 'pending' | 'completed';
+/** Smart lists (desktop sidebar): every task, due today or overdue, or due later. */
+export type ListView = 'all' | 'today' | 'upcoming';
 /** due = by due date in Overdue/Today/... groups (default). */
 export type SortBy = 'due' | 'updated' | 'added' | 'priority';
 export type ToastKind = 'info' | 'error' | 'success';
@@ -89,6 +91,7 @@ interface AppCtx {
   archivedCategories: Category[];
   sync: SyncState;
   lastSyncAt: number | null;
+  /** 'all', a category id, or 'none' (tasks without a category). */
   filter: string;
   setFilter(f: string): void;
   tab: Tab;
@@ -97,6 +100,10 @@ interface AppCtx {
   setSortBy(s: SortBy): void;
   query: string;
   setQuery(q: string): void;
+  list: ListView;
+  setList(l: ListView): void;
+  /** Open-task counts for the sidebar's smart lists (ignore the category filter). */
+  listCounts: { all: number; today: number; upcoming: number; completed: number };
   visibleTasks: Task[];
   categoryById(id: string | null): Category | null;
   counts: { total: number; pending: number; completed: number; doneToday: number; dueToday: number };
@@ -120,6 +127,7 @@ interface AppCtx {
   archiveTasks(ids: string[]): Promise<void>;
   deleteTasks(ids: string[]): Promise<void>;
   archiveTask(id: string, archived?: boolean): Promise<void>;
+  duplicateTask(id: string): Promise<void>;
   archiveCategory(id: string, archived?: boolean): Promise<void>;
 
   /** Bumped every time a task gets completed — drives the confetti. */
@@ -176,6 +184,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void storageSet(SORT_KEY, s);
   }, []);
   const [query, setQuery] = useState('');
+  const [list, setList] = useState<ListView>('all');
   const [celebrate, setCelebrate] = useState(0);
 
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
@@ -680,6 +689,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [showToast, write],
   );
 
+  const duplicateTask = useCallback<AppCtx['duplicateTask']>(
+    async id => {
+      const t = data.tasks[id];
+      if (!t) return;
+      const now = Date.now();
+      const { id: _old, ...rest } = t;
+      const copy = newId();
+      await write([
+        {
+          kind: 'task',
+          id: copy,
+          op: 'upsert',
+          data: {
+            ...rest,
+            title: `${t.title} (copy)`.slice(0, 500),
+            subtasks: t.subtasks.map(s => ({ ...s, id: Math.random().toString(36).slice(2, 10), done: false })),
+            completedAt: null,
+            archivedAt: null,
+            order: now,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+      ]);
+      setEditTaskId(copy);
+      showToast('Task duplicated', 'success');
+    },
+    [data.tasks, write, showToast],
+  );
+
   const archiveCategory = useCallback<AppCtx['archiveCategory']>(
     async (id, archived = true) => {
       const set = (on: boolean) => write([{ kind: 'category', id, op: 'upsert', data: { archivedAt: on ? Date.now() : null } }]);
@@ -741,12 +780,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const inFilter = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const now = Date.now();
+    const endOfToday = new Date(now).setHours(23, 59, 59, 999);
     return tasks.filter(
       t =>
-        (filter === 'all' || t.categoryId === filter) &&
+        (filter === 'all' || (filter === 'none' ? !t.categoryId : t.categoryId === filter)) &&
+        (list === 'all' ||
+          (list === 'today' ? t.dueAt != null && t.dueAt <= endOfToday : t.dueAt != null && t.dueAt > endOfToday)) &&
         (!q || t.title.toLowerCase().includes(q) || t.subtasks.some(s => s.title.toLowerCase().includes(q))),
     );
-  }, [tasks, filter, query]);
+  }, [tasks, filter, query, list]);
+
+  const listCounts = useMemo(() => {
+    const endOfToday = new Date().setHours(23, 59, 59, 999);
+    const open = tasks.filter(isPending);
+    return {
+      all: open.length,
+      today: open.filter(t => t.dueAt != null && t.dueAt <= endOfToday).length,
+      upcoming: open.filter(t => t.dueAt != null && t.dueAt > endOfToday).length,
+      completed: tasks.length - open.length,
+    };
+  }, [tasks]);
 
   const counts = useMemo(() => {
     const now = Date.now();
@@ -761,7 +815,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const countsByCategory = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const t of tasks) if (t.categoryId && isPending(t)) m[t.categoryId] = (m[t.categoryId] ?? 0) + 1;
+    for (const t of tasks) if (isPending(t)) m[t.categoryId ?? 'none'] = (m[t.categoryId ?? 'none'] ?? 0) + 1;
     return m;
   }, [tasks]);
 
@@ -908,6 +962,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSortBy,
     query,
     setQuery,
+    list,
+    setList,
+    listCounts,
     visibleTasks,
     categoryById,
     counts,
@@ -929,6 +986,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     archiveTasks,
     deleteTasks,
     archiveTask,
+    duplicateTask,
     archiveCategory,
     celebrate,
     editTaskId,

@@ -91,7 +91,9 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
         hasMeta ? 'rounded-xl' : 'rounded-lg',
         selected
           ? 'border-acc/60 bg-acc/[.11] shadow-[inset_0_0_0_1px_rgba(63,209,197,.25)]'
-          : 'border-white/[.04] bg-white/[.015] hover:bg-white/[.03] focus-within:bg-white/[.03]',
+          : app.editTaskId === task.id
+            ? 'border-white/[.16] bg-white/[.06]' // open in the desktop side panel
+            : 'border-white/[.04] bg-white/[.015] hover:bg-white/[.03] focus-within:bg-white/[.03]',
         selecting && 'cursor-pointer',
       )}
       style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}

@@ -135,6 +135,12 @@ export default function NotificationsScreen() {
                           {n.message && <span className="mt-0.5 block whitespace-pre-wrap text-[11.5px] leading-snug text-mut">{n.message}</span>}
                           <span className="mt-1 flex items-center gap-1.5 text-[10.5px] text-mut/80">
                             <span className="tabular-nums">{formatTime(n.createdAt)}</span>
+                            {n.from && (
+                              <>
+                                <span className="text-mut/40">·</span>
+                                <span className="truncate text-pop">{n.from}</span>
+                              </>
+                            )}
                             {n.url && (
                               <>
                                 <span className="text-mut/40">·</span>

@@ -1,4 +1,4 @@
-/* The Windows app fills its resizable window (400×600 up to 1000×800)
+/* The desktop app fills its resizable window (400×600 and up)
    instead of the popup's fixed 400×600 "phone": every screen stretches to
    the window. Only reading-width content stays in a comfortable column. */
 html.desktop,

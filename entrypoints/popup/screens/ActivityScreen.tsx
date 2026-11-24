@@ -188,8 +188,8 @@ export default function ActivityScreen() {
                             <span className="text-mut/40">·</span>
                             <span className="tabular-nums">{formatTime(e.at)}</span>
                             {e.by === 'agent' && (
-                              <span className="inline-flex items-center gap-0.5 rounded-full bg-pop/10 px-1.5 text-pop">
-                                <Bot size={9} /> AI
+                              <span className="inline-flex min-w-0 items-center gap-0.5 rounded-full bg-pop/10 px-1.5 text-pop" title={e.agent ? `Done by ${e.agent}` : 'Done by an AI agent'}>
+                                <Bot size={9} className="shrink-0" /> <span className="truncate">{e.agent || 'AI'}</span>
                               </span>
                             )}
                           </span>

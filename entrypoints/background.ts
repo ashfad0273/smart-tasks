@@ -171,7 +171,7 @@ export default defineBackground(() => {
                   iconUrl: chrome.runtime.getURL('icon/128.png'),
                   title: n.title,
                   message: n.message,
-                  contextMessage: reg.accounts.filter(x => !x.local).length > 1 ? `From your AI agent · ${a.email}` : 'From your AI agent',
+                  contextMessage: `From ${n.from || 'your AI agent'}${reg.accounts.filter(x => !x.local).length > 1 ? ` · ${a.email}` : ''}`,
                   priority: 2,
                   silent: true, // our own chime plays instead of the system sound
                 });

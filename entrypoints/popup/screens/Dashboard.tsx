@@ -34,6 +34,7 @@ import SyncBadge from '../components/SyncBadge';
 import TaskCard, { TASK_DRAG_TYPE } from '../components/TaskCard';
 import ScrollRow from '../components/ScrollRow';
 import QuickAdd from '../components/QuickAdd';
+import { useWide } from '../hooks/useWide';
 import type { Task } from '../../../lib/types';
 
 function Pill({
@@ -166,7 +167,7 @@ function sectionizeByDue(list: Task[]): Section[] {
 }
 
 /** Days in a row (ending today or yesterday) with at least one task finished. */
-function streakOf(tasks: Task[]): number {
+export function streakOf(tasks: Task[]): number {
   const days = new Set(tasks.filter(t => t.completedAt).map(t => startOfDay(t.completedAt!).getTime()));
   const D = 86_400_000;
   let day = startOfDay(Date.now()).getTime();
@@ -181,6 +182,7 @@ function streakOf(tasks: Task[]): number {
 
 export default function Dashboard() {
   const app = useApp();
+  const wide = useWide();
   const [adding, setAdding] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
@@ -219,7 +221,7 @@ export default function Dashboard() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || app.editTaskId || app.confirmData || adding) return;
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || (app.editTaskId && !wide) || app.confirmData || adding) return;
       if ((e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
         e.preventDefault();
         app.setSelected(app.visibleTasks.map(x => x.id));
@@ -233,13 +235,17 @@ export default function Dashboard() {
         setAdding(true);
       } else if (e.key === '/') {
         e.preventDefault();
+        if (wide) {
+          window.dispatchEvent(new Event('st-focus-search'));
+          return;
+        }
         setSearchOpen(true);
         setTimeout(() => searchRef.current?.focus());
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [app, adding]);
+  }, [app, adding, wide]);
 
   // Unread AI notifications for the bell; a notification click can ask to land on Activity.
   const [unread, setUnread] = useState(0);
@@ -295,10 +301,69 @@ export default function Dashboard() {
           ? { icon: CircleCheckBig, title: 'Inbox zero', sub: 'Nothing left here. Go stretch, hydrate, or add something new.' }
           : { icon: FolderOpen, title: 'Nothing here', sub: 'No tasks in this category yet.' };
 
+  const sortMenu = (
+            <div ref={sortRef} className="relative">
+              <button
+                aria-label={`Sort: ${SORTS.find(s => s.id === app.sortBy)?.label}`}
+                title={`Sort: ${SORTS.find(s => s.id === app.sortBy)?.label}`}
+                aria-haspopup="menu"
+                aria-expanded={sortOpen}
+                onClick={() => setSortOpen(o => !o)}
+                className={cx(
+                  'press flex items-center gap-1.5 whitespace-nowrap rounded-full border hover:text-acc',
+                  wide ? 'px-3 py-1.5 text-[11.5px] font-semibold' : 'p-3',
+                  app.sortBy !== 'due' ? 'border-acc/30 bg-acc/10 text-acc' : 'border-white/[.02] bg-black/15 text-mut',
+                )}
+              >
+                <ArrowDownUp size={13} />
+                {wide && <span>Sort: {SORTS.find(s => s.id === app.sortBy)?.label}</span>}
+              </button>
+              {sortOpen && (
+                <div
+                  role="menu"
+                  className="anim-pop absolute right-0 top-full z-30 mt-2 w-52 origin-top-right rounded-2xl border border-white/[.06] bg-surface p-1.5 shadow-[0_16px_40px_-12px_rgba(0,0,0,.7)]"
+                >
+                  <p className="px-2.5 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-mut/70">Sort by</p>
+                  {SORTS.map(s => (
+                    <button
+                      key={s.id}
+                      role="menuitemradio"
+                      aria-checked={app.sortBy === s.id}
+                      onClick={() => {
+                        app.setSortBy(s.id);
+                        setSortOpen(false);
+                      }}
+                      className={cx(
+                        'press flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-white/[.04]',
+                        app.sortBy === s.id && 'bg-acc/[.07]',
+                      )}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className={cx('block text-[12.5px] font-medium', app.sortBy === s.id ? 'text-acc' : 'text-txt')}>{s.label}</span>
+                        <span className="block text-[10.5px] text-mut">{s.sub}</span>
+                      </span>
+                      {app.sortBy === s.id && <Check size={13} className="shrink-0 text-acc" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+  );
+
   return (
-    <div className="ambient relative flex h-full flex-col bg-bg">
+    <div className={cx('ambient relative flex h-full flex-col bg-bg', wide && 'st-wide')}>
       <Confetti fire={party} />
 
+      {wide ? (
+        <WideHeader
+          sortMenu={sortMenu}
+          streak={streak}
+          doneToday={doneToday}
+          pct={pct}
+          tabs={tabs}
+          onAdd={() => setAdding(true)}
+        />
+      ) : (
       <header className="flex items-center gap-3 px-6 pt-6">
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
@@ -369,6 +434,7 @@ export default function Dashboard() {
           </button>
         </div>
       </header>
+      )}
 
       {update && (
         <button
@@ -404,7 +470,8 @@ export default function Dashboard() {
         </button>
       )}
 
-      {/* Category pills */}
+      {/* Category pills (the wide desktop layout has them in the sidebar) */}
+      {!wide && (
       <div className="mt-5 flex items-center">
       <div className="min-w-0 flex-1">
       <ScrollRow className="gap-2 px-6 py-0.5">
@@ -434,7 +501,10 @@ export default function Dashboard() {
       </div>
       </div>
 
+      )}
+
       {/* Tabs + search */}
+      {!wide && (
       <div className="mt-5 flex items-center gap-2 px-6">
         {searchOpen ? (
           <div className="anim-pop flex flex-1 items-center gap-2 rounded-full border border-white/[.04] bg-black/20 px-3.5 py-2 focus-within:border-acc/30">
@@ -488,50 +558,7 @@ export default function Dashboard() {
                 </button>
               ))}
             </div>
-            <div ref={sortRef} className="relative">
-              <button
-                aria-label={`Sort: ${SORTS.find(s => s.id === app.sortBy)?.label}`}
-                title={`Sort: ${SORTS.find(s => s.id === app.sortBy)?.label}`}
-                aria-haspopup="menu"
-                aria-expanded={sortOpen}
-                onClick={() => setSortOpen(o => !o)}
-                className={cx(
-                  'press rounded-full border p-3 hover:text-acc',
-                  app.sortBy !== 'due' ? 'border-acc/30 bg-acc/10 text-acc' : 'border-white/[.02] bg-black/15 text-mut',
-                )}
-              >
-                <ArrowDownUp size={13} />
-              </button>
-              {sortOpen && (
-                <div
-                  role="menu"
-                  className="anim-pop absolute right-0 top-full z-30 mt-2 w-52 origin-top-right rounded-2xl border border-white/[.06] bg-surface p-1.5 shadow-[0_16px_40px_-12px_rgba(0,0,0,.7)]"
-                >
-                  <p className="px-2.5 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-mut/70">Sort by</p>
-                  {SORTS.map(s => (
-                    <button
-                      key={s.id}
-                      role="menuitemradio"
-                      aria-checked={app.sortBy === s.id}
-                      onClick={() => {
-                        app.setSortBy(s.id);
-                        setSortOpen(false);
-                      }}
-                      className={cx(
-                        'press flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-white/[.04]',
-                        app.sortBy === s.id && 'bg-acc/[.07]',
-                      )}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className={cx('block text-[12.5px] font-medium', app.sortBy === s.id ? 'text-acc' : 'text-txt')}>{s.label}</span>
-                        <span className="block text-[10.5px] text-mut">{s.sub}</span>
-                      </span>
-                      {app.sortBy === s.id && <Check size={13} className="shrink-0 text-acc" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            {sortMenu}
             <button
               aria-label="Search (press /)"
               title="Search (/)"
@@ -544,7 +571,9 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="hide-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto px-6 pb-24">
+      )}
+
+      <div className={cx('hide-scrollbar min-h-0 flex-1 overflow-y-auto px-6 pb-24', wide ? 'mt-3' : 'mt-4')}>
         {app.visibleTasks.length === 0 ? (
           <EmptyState icon={empty.icon} title={empty.title} sub={empty.sub}>
             {app.tasks.length === 0 && !app.query && (
@@ -604,7 +633,7 @@ export default function Dashboard() {
       <QuickAdd open={adding} onClose={() => setAdding(false)} />
       {app.selected.length > 0 && <SelectionBar />}
       <button
-        hidden={app.selected.length > 0}
+        hidden={app.selected.length > 0 || wide}
         onClick={() => setAdding(a => !a)}
         aria-label={adding ? 'Close new task' : 'New task (N)'}
         title={adding ? 'Close' : 'New task (N)'}
@@ -704,5 +733,96 @@ function SelectionBar() {
         <X size={14} />
       </button>
     </div>
+  );
+}
+
+/** Desktop (wide window) page header: list title, counts, streak, tabs, sort, and an inline add row. */
+function WideHeader({
+  sortMenu,
+  streak,
+  doneToday,
+  pct,
+  tabs,
+  onAdd,
+}: {
+  sortMenu: React.ReactNode;
+  streak: number;
+  doneToday: number;
+  pct: number;
+  tabs: Array<{ id: Tab; label: string; count: number }>;
+  onAdd: () => void;
+}) {
+  const app = useApp();
+  const cat = app.filter !== 'all' ? app.categoryById(app.filter) : null;
+  const title = cat
+    ? cat.name
+    : app.filter === 'none'
+      ? 'No category'
+      : app.list === 'today'
+      ? 'Today'
+      : app.list === 'upcoming'
+        ? 'Upcoming'
+        : app.tab === 'completed'
+          ? 'Completed'
+          : 'All tasks';
+  const sub = [
+    `${app.counts.pending} open`,
+    app.counts.completed ? `${app.counts.completed} done` : null,
+    doneToday ? `${doneToday} finished today` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <>
+      <header className="flex items-center gap-3 px-6 pt-5">
+        <div className="min-w-0">
+          <h1 className="flex items-center gap-2 truncate text-[19px] font-bold tracking-tight">
+            {cat && <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: cat.color }} />}
+            {title}
+          </h1>
+          <p className="truncate text-[12px] text-mut">{app.query ? `Searching for “${app.query}”` : sub}</p>
+        </div>
+        {streak >= 2 && (
+          <span
+            title={`${streak}-day streak: you finished something ${streak} days in a row`}
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-warn/25 bg-warn/10 px-2 py-1 text-[11px] font-semibold tabular-nums text-warn"
+          >
+            <Flame size={12} /> {streak}-day streak
+          </span>
+        )}
+        {(app.sync === 'offline' || app.sync === 'error') && <SyncBadge state={app.sync} onClick={app.syncNow} />}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <div className="flex rounded-full border border-white/[.04] bg-black/20 p-[3px]" role="tablist">
+            {tabs.map(t => (
+              <button
+                key={t.id}
+                role="tab"
+                aria-selected={app.tab === t.id}
+                onClick={() => app.setTab(t.id)}
+                className={cx(
+                  'press whitespace-nowrap rounded-full px-3 py-1 text-[11.5px] font-semibold transition-colors',
+                  app.tab === t.id ? 'bg-acc/[.12] text-acc' : 'text-mut hover:text-txt',
+                )}
+              >
+                {t.label} <span className="opacity-60">{t.count}</span>
+              </button>
+            ))}
+          </div>
+          {sortMenu}
+        </div>
+      </header>
+      <div className="mx-6 mt-3 h-[3px] rounded-full bg-white/[.05]" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Tasks done">
+        {pct > 0 && <div className="meter-fill h-full rounded-full transition-[width] duration-700" style={{ width: `${Math.max(pct, 3)}%` }} />}
+      </div>
+      <button
+        onClick={onAdd}
+        className="press mx-6 mt-3 flex items-center gap-2.5 rounded-xl border border-dashed border-white/[.1] px-4 py-2.5 text-left text-[12.5px] text-mut hover:border-acc/40 hover:text-acc"
+      >
+        <Plus size={14} />
+        <span className="flex-1">Add a task{cat ? ` to ${cat.name}` : ''}</span>
+        <kbd className="rounded border border-white/10 bg-black/20 px-1.5 text-[10px] font-semibold">N</kbd>
+      </button>
+    </>
   );
 }

@@ -35,3 +35,10 @@ export const isMac = (): boolean => typeof navigator !== 'undefined' && /Mac/i.t
 
 /** The desktop app's show/hide shortcut, as shown to people. */
 export const desktopShortcut = (): string => (isMac() ? '⌘ + ⌥ + K' : 'Ctrl + Alt + K');
+
+/** Desktop-only controls exposed by desktop/web/host.ts (missing in the extension). */
+export interface DesktopHost {
+  getAutostart(): Promise<boolean>;
+  setAutostart(on: boolean): Promise<boolean>;
+}
+export const desktopHost = (): DesktopHost | null => (globalThis as { __ST_HOST__?: DesktopHost }).__ST_HOST__ ?? null;

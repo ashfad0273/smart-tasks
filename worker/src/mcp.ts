@@ -16,6 +16,8 @@ type Rec = Record<string, unknown> & { id: string };
 interface Ctx {
   hub: Hub;
   name: string;
+  /** Name of the agent key in use ("Claude Code", "Cursor"...), shown in History. */
+  agent: string;
   /** IANA zone of the browser that created the token, e.g. "Asia/Dhaka". */
   tz: string;
   /** What the user lets agents do (Settings → AI agent → Permissions). */
@@ -98,7 +100,7 @@ const list = async (ctx: Ctx, kind: 'task' | 'category') => (await ctx.hub.list(
 async function push(ctx: Ctx, ops: unknown[]): Promise<void> {
   // Same validation as the extension's sync endpoint.
   const clean: SyncOp[] = parseOps({ ops });
-  await ctx.hub.push(clean, 'agent');
+  await ctx.hub.push(clean, 'agent', ctx.agent);
 }
 
 const PERM_LABEL: Record<AgentPerm, string> = {
@@ -620,7 +622,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
           throw new ToolError('url must be an http(s) link');
         }
       }
-      const r = await ctx.hub.notify({ title, message, url });
+      const r = await ctx.hub.notify({ title, message, url }, ctx.agent);
       if ('error' in r) throw new ToolError(r.error);
       return { sent: true, note: 'Devices with Smart Tasks show it within about a minute (instantly if the popup is open).' };
     }

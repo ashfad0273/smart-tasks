@@ -69,11 +69,10 @@ fn toggle(app: &AppHandle) {
 fn build_window(app: &AppHandle, visible: bool) -> tauri::Result<()> {
     let w = WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))
         .title("Smart Tasks")
-        .inner_size(400.0, 600.0)
+        .inner_size(1100.0, 720.0)
         .min_inner_size(400.0, 600.0)
-        .max_inner_size(1000.0, 800.0)
         .resizable(true)
-        .maximizable(false)
+        .maximizable(true)
         .center()
         .visible(visible)
         .background_color(Color(16, 25, 28, 255))
@@ -206,6 +205,21 @@ fn set_badge(app: AppHandle, tooltip: String, tray: Vec<u8>, overlay: Option<Vec
     Ok(())
 }
 
+/// Start-at-login state, for the switch in Settings.
+#[tauri::command]
+fn get_autostart() -> bool {
+    system::autostart_enabled()
+}
+
+/// Turn start-at-login on or off from Settings; keeps the tray checkbox in step.
+#[tauri::command]
+fn set_autostart(app: AppHandle, on: bool) -> bool {
+    let _ = system::set_autostart(on);
+    let now = system::autostart_enabled();
+    let _ = app.state::<TrayItems>().startup.set_checked(now);
+    now
+}
+
 /// Which accounts this app notifies for (answered to the Chrome extension).
 #[tauri::command]
 fn set_presence(app: AppHandle, reminders: Vec<String>, agent: Vec<String>, reminders_on: bool) {
@@ -289,7 +303,9 @@ fn main() {
             set_presence,
             google_auth,
             check_update,
-            install_update
+            install_update,
+            get_autostart,
+            set_autostart
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

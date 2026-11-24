@@ -21,9 +21,12 @@ export { UserHub } from './hub';
  *   GET    /v1/sync?since=REV         → {rev, changes, more}
  *   POST   /v1/sync                   {ops}  → {rev}
  *   GET    /v1/ws?token=…             WebSocket: {"type":"rev","rev":N} on every change
- *   GET    /v1/agent-token            → {token: {hint, createdAt, lastUsed} | null}
- *   POST   /v1/agent-token            {timeZone} → {token: "stk_…"}  (replaces any old one)
- *   DELETE /v1/agent-token            revoke
+ *   GET    /v1/stats                  → {since, total, agent, byAgent: {name: n}}  (last 30 days)
+ *   GET    /v1/agent-keys             → {keys: [{id, name, hint, createdAt, lastUsed}]}
+ *   POST   /v1/agent-keys             {name, timeZone} → {key, token: "stk_…"}  (token shown once)
+ *   PATCH  /v1/agent-keys/:id         {name} → {key}
+ *   DELETE /v1/agent-keys/:id         revoke one key
+ *   GET|POST|DELETE /v1/agent-token   old single-token API (1.6.x clients): acts on the newest key
  *   GET    /v1/agent-permissions      → {permissions: {add, edit, complete, archive, delete, categories, notify}}
  *   PATCH  /v1/agent-permissions      {permissions: {…partial}} → {permissions}
  *   GET    /v1/sessions               → {sessions: [{id, device, location, createdAt, lastSeen, current, online}], agent}
@@ -198,22 +201,57 @@ function validZone(tz: unknown): string {
   }
 }
 
-async function agentAuth(env: Env, token: string | null): Promise<{ user: UserRow; tz: string }> {
+async function agentAuth(env: Env, token: string | null): Promise<{ user: UserRow; tz: string; agent: string }> {
   if (!token?.startsWith(AGENT_PREFIX)) {
     throw new HttpError(401, 'unauthenticated', 'Send your Smart Tasks agent token as "Authorization: Bearer stk_…". Create one in Smart Tasks → Settings → AI agent.');
   }
   const hash = await sha256(token);
   const row = await env.DB.prepare(
-    `SELECT u.*, a.time_zone, a.last_used FROM agent_tokens a JOIN users u ON u.id = a.user_id WHERE a.token_hash = ?`,
+    `SELECT u.*, a.time_zone, a.last_used, a.name AS agent_name FROM agent_keys a JOIN users u ON u.id = a.user_id WHERE a.token_hash = ?`,
   )
     .bind(hash)
-    .first<UserRow & { time_zone: string; last_used: number | null }>();
+    .first<UserRow & { time_zone: string; last_used: number | null; agent_name: string }>();
   if (!row) throw new HttpError(401, 'token-revoked', 'This agent token is no longer valid. Create a new one in Smart Tasks → Settings → AI agent.');
   const now = Date.now();
   if (!row.last_used || now - row.last_used > 10 * 60_000) {
-    await env.DB.prepare('UPDATE agent_tokens SET last_used = ? WHERE token_hash = ?').bind(now, hash).run();
+    await env.DB.prepare('UPDATE agent_keys SET last_used = ? WHERE token_hash = ?').bind(now, hash).run();
   }
-  return { user: row, tz: row.time_zone || 'UTC' };
+  return { user: row, tz: row.time_zone || 'UTC', agent: row.agent_name };
+}
+
+const MAX_AGENT_KEYS = 20;
+type AgentKeyRow = { id: string; name: string; hint: string; created_at: number; last_used: number | null };
+const publicKey = (r: AgentKeyRow) => ({ id: r.id, name: r.name, hint: r.hint, createdAt: r.created_at, lastUsed: r.last_used });
+
+function keyName(v: unknown): string {
+  const name = (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '').slice(0, 40);
+  if (!name) throw new HttpError(400, 'bad-name', 'Give the key a name, like "Claude Code" or "Cursor".');
+  return name;
+}
+
+async function agentKeys(env: Env, userId: string): Promise<AgentKeyRow[]> {
+  const { results } = await env.DB.prepare(
+    'SELECT id, name, hint, created_at, last_used FROM agent_keys WHERE user_id = ? ORDER BY created_at DESC',
+  )
+    .bind(userId)
+    .all<AgentKeyRow>();
+  return results;
+}
+
+async function createAgentKey(env: Env, userId: string, name: string, timeZone: unknown): Promise<{ key: ReturnType<typeof publicKey>; token: string }> {
+  const keys = await agentKeys(env, userId);
+  if (keys.length >= MAX_AGENT_KEYS) throw new HttpError(400, 'too-many-keys', `You can have up to ${MAX_AGENT_KEYS} agent keys. Revoke one first.`);
+  if (keys.some(k => k.name.toLowerCase() === name.toLowerCase())) {
+    throw new HttpError(409, 'name-taken', `You already have a key called "${name}". Pick another name so History can tell them apart.`);
+  }
+  const token = AGENT_PREFIX + randomToken();
+  const row: AgentKeyRow = { id: randomToken(9), name, hint: token.slice(-4), created_at: Date.now(), last_used: null };
+  await env.DB.prepare(
+    'INSERT INTO agent_keys (id, user_id, name, token_hash, hint, time_zone, created_at, last_used) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)',
+  )
+    .bind(row.id, userId, name, await sha256(token), row.hint, validZone(timeZone), row.created_at)
+    .run();
+  return { key: publicKey(row), token };
 }
 
 /* ── handlers ──────────────────────────────────────────────────────────── */
@@ -354,9 +392,9 @@ async function route(req: Request, env: Env): Promise<Response> {
   }
 
   if (p === '/mcp') {
-    const { user, tz } = await agentAuth(env, bearer(req));
+    const { user, tz, agent } = await agentAuth(env, bearer(req));
     const h = hub(env, user.id);
-    return handleMcp(req, { hub: h, name: user.name, tz, perms: await h.agentPerms() }, { 'Cache-Control': 'no-store', ...CORS });
+    return handleMcp(req, { hub: h, name: user.name, agent, tz, perms: await h.agentPerms() }, { 'Cache-Control': 'no-store', ...CORS });
   }
 
   // WebSocket: browsers can't set headers on WS, so the token rides in the query.
@@ -389,6 +427,7 @@ async function route(req: Request, env: Env): Promise<Response> {
       await env.DB.batch([
         env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(user.id),
         env.DB.prepare('DELETE FROM reset_codes WHERE user_id = ?').bind(user.id),
+        env.DB.prepare('DELETE FROM agent_keys WHERE user_id = ?').bind(user.id),
         env.DB.prepare('DELETE FROM agent_tokens WHERE user_id = ?').bind(user.id),
         env.DB.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
       ]);
@@ -398,23 +437,26 @@ async function route(req: Request, env: Env): Promise<Response> {
   if (p === '/v1/activity' && m === 'GET') {
     const cursor = (url.searchParams.get('cursor') ?? '').slice(0, 40);
     const limit = Math.min(100, Math.max(1, Math.floor(Number(url.searchParams.get('limit')) || 50)));
-    return json(await hub(env, user.id).activity(cursor, limit));
+    const task = (url.searchParams.get('task') ?? '').slice(0, 80) || null;
+    return json(await hub(env, user.id).activity(cursor, limit, task));
+  }
+  if (p === '/v1/stats' && m === 'GET') {
+    return json(await hub(env, user.id).stats());
   }
   if (p === '/v1/notices' && m === 'GET') {
     const after = Math.max(0, Math.floor(Number(url.searchParams.get('after')) || 0));
     return json(await hub(env, user.id).notices(after));
   }
   if (p === '/v1/sessions' && m === 'GET') {
-    const [{ results }, agent, online] = await Promise.all([
+    const [{ results }, agents, online] = await Promise.all([
       env.DB.prepare('SELECT id, device, location, created_at, last_seen FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY last_seen DESC')
         .bind(user.id, Date.now())
         .all<{ id: string; device: string | null; location: string | null; created_at: number; last_seen: number }>(),
-      env.DB.prepare('SELECT hint, created_at, last_used FROM agent_tokens WHERE user_id = ?')
-        .bind(user.id)
-        .first<{ hint: string; created_at: number; last_used: number | null }>(),
+      agentKeys(env, user.id),
       hub(env, user.id).online(),
     ]);
     const live = new Set(online);
+    const agent = agents[0];
     return json({
       sessions: results.map(r => ({
         id: r.id,
@@ -426,6 +468,7 @@ async function route(req: Request, env: Env): Promise<Response> {
         online: live.has(r.id),
       })),
       agent: agent ? { hint: agent.hint, createdAt: agent.created_at, lastUsed: agent.last_used } : null,
+      agents: agents.map(publicKey),
     });
   }
   if (p === '/v1/sessions' && m === 'DELETE' && url.searchParams.get('others') === '1') {
@@ -452,27 +495,50 @@ async function route(req: Request, env: Env): Promise<Response> {
       return json({ permissions: await h.setAgentPerms(next) });
     }
   }
+  if (p === '/v1/agent-keys') {
+    if (m === 'GET') return json({ keys: (await agentKeys(env, user.id)).map(publicKey) });
+    if (m === 'POST') {
+      const b = await readJson<{ name?: unknown; timeZone?: unknown }>(req);
+      return json(await createAgentKey(env, user.id, keyName(b.name), b.timeZone));
+    }
+  }
+  const km = p.match(/^\/v1\/agent-keys\/([A-Za-z0-9_-]{6,40})$/);
+  if (km) {
+    if (m === 'PATCH') {
+      const name = keyName((await readJson<{ name?: unknown }>(req)).name);
+      const clash = await env.DB.prepare('SELECT id FROM agent_keys WHERE user_id = ? AND lower(name) = lower(?) AND id != ?')
+        .bind(user.id, name, km[1])
+        .first();
+      if (clash) throw new HttpError(409, 'name-taken', `You already have a key called "${name}".`);
+      const old = await env.DB.prepare('SELECT name FROM agent_keys WHERE user_id = ? AND id = ?').bind(user.id, km[1]).first<{ name: string }>();
+      if (!old) throw new HttpError(404, 'not-found', 'That key no longer exists.');
+      const row = await env.DB.prepare('UPDATE agent_keys SET name = ? WHERE user_id = ? AND id = ? RETURNING id, name, hint, created_at, last_used')
+        .bind(name, user.id, km[1])
+        .first<AgentKeyRow>();
+      if (!row) throw new HttpError(404, 'not-found', 'That key no longer exists.');
+      if (old.name !== name) await hub(env, user.id).renameAgent(old.name, name);
+      return json({ key: publicKey(row) });
+    }
+    if (m === 'DELETE') {
+      const r = await env.DB.prepare('DELETE FROM agent_keys WHERE user_id = ? AND id = ?').bind(user.id, km[1]).run();
+      if (!r.meta.changes) throw new HttpError(404, 'not-found', 'That key is already revoked.');
+      return json({ ok: true });
+    }
+  }
+  // Old single-token API, still used by 1.6.x apps until they update.
   if (p === '/v1/agent-token') {
+    const newest = (await agentKeys(env, user.id))[0];
     if (m === 'GET') {
-      const row = await env.DB.prepare('SELECT hint, created_at, last_used FROM agent_tokens WHERE user_id = ?')
-        .bind(user.id)
-        .first<{ hint: string; created_at: number; last_used: number | null }>();
-      return json({ token: row ? { hint: row.hint, createdAt: row.created_at, lastUsed: row.last_used } : null });
+      return json({ token: newest ? { hint: newest.hint, createdAt: newest.created_at, lastUsed: newest.last_used } : null });
     }
     if (m === 'POST') {
-      const b = await readJson<{ timeZone?: string }>(req).catch(() => ({}) as { timeZone?: string });
-      const token = AGENT_PREFIX + randomToken();
-      await env.DB.prepare(
-        `INSERT INTO agent_tokens (user_id, token_hash, hint, time_zone, created_at, last_used) VALUES (?, ?, ?, ?, ?, NULL)
-         ON CONFLICT (user_id) DO UPDATE SET token_hash = excluded.token_hash, hint = excluded.hint,
-           time_zone = excluded.time_zone, created_at = excluded.created_at, last_used = NULL`,
-      )
-        .bind(user.id, await sha256(token), token.slice(-4), validZone(b.timeZone), Date.now())
-        .run();
+      const b = await readJson<{ timeZone?: unknown }>(req).catch(() => ({}) as { timeZone?: unknown });
+      if (newest) await env.DB.prepare('DELETE FROM agent_keys WHERE user_id = ? AND id = ?').bind(user.id, newest.id).run();
+      const { token } = await createAgentKey(env, user.id, newest?.name ?? 'AI agent', b.timeZone);
       return json({ token });
     }
     if (m === 'DELETE') {
-      await env.DB.prepare('DELETE FROM agent_tokens WHERE user_id = ?').bind(user.id).run();
+      if (newest) await env.DB.prepare('DELETE FROM agent_keys WHERE user_id = ? AND id = ?').bind(user.id, newest.id).run();
       return json({ ok: true });
     }
   }

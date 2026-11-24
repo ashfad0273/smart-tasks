@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Bot, ChevronLeft, Laptop, LogOut, Monitor, Smartphone } from 'lucide-react';
-import { api, ApiError, type SessionsResult } from '../../../lib/api';
+import { api, ApiError, type AgentKey, type SessionsResult } from '../../../lib/api';
 import { cx } from '../../../lib/utils';
 import { useApp } from '../state/AppContext';
 
@@ -89,17 +89,17 @@ export default function DevicesScreen() {
     }
   };
 
-  const disconnectAgent = async () => {
-    if (!session || !data?.agent) return;
+  const disconnectAgent = async (k: AgentKey) => {
+    if (!session) return;
     const ok = await app.confirm({
-      title: 'Disconnect AI agents?',
-      message: `The key ending in ${data.agent.hint} stops working right away. Your tasks are not touched.`,
-      confirmText: 'Disconnect',
+      title: `Revoke "${k.name}"?`,
+      message: `The key ending in ${k.hint} stops working right away. Your tasks are not touched.`,
+      confirmText: 'Revoke',
       danger: true,
     });
     if (!ok) return;
     try {
-      await api.revokeAgentToken(session);
+      await api.revokeAgentKey(session, k.id);
       app.showToast('Agent disconnected', 'success');
       await load();
     } catch (e) {
@@ -177,25 +177,25 @@ export default function DevicesScreen() {
                 );
               })}
 
-              {data.agent && (
-                <div className="flex items-center gap-3 px-3.5 py-3">
+              {(data.agents ?? []).map(k => (
+                <div key={k.id} className="flex items-center gap-3 px-3.5 py-3">
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-pop/25 bg-pop/10 text-pop">
                     <Bot size={16} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-medium">AI agent</p>
+                    <p className="truncate text-[13px] font-medium">{k.name}</p>
                     <p className="truncate text-[11px] text-mut">
-                      Key ends in {data.agent.hint} · used {ago(data.agent.lastUsed)}
+                      AI agent · key ends in {k.hint} · used {ago(k.lastUsed)}
                     </p>
                   </div>
                   <button
-                    onClick={() => void disconnectAgent()}
+                    onClick={() => void disconnectAgent(k)}
                     className="press shrink-0 rounded-full border border-white/[.06] px-2.5 py-1 text-[11.5px] font-medium text-mut hover:border-danger/40 hover:text-danger"
                   >
-                    Disconnect
+                    Revoke
                   </button>
                 </div>
-              )}
+              ))}
             </section>
 
             {others > 0 && (

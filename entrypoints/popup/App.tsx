@@ -17,6 +17,9 @@ import EditTaskSheet from './components/EditTaskSheet';
 import Splash from './components/Splash';
 import SwitchAccountModal from './components/SwitchAccountModal';
 import Toast from './components/Toast';
+import Sidebar from './components/Sidebar';
+import DesktopSettings from './screens/DesktopSettings';
+import { useWide } from './hooks/useWide';
 import { AppProvider, useApp } from './state/AppContext';
 
 function Screen() {
@@ -43,9 +46,43 @@ function Screen() {
   return <Dashboard />;
 }
 
+/** Pages that read best as a column, not stretched across a wide window. */
+const NARROW_PAGES = new Set(['activity', 'archive', 'notifications', 'devices', 'categories']);
+
+/** Desktop app, wide window: sidebar + page + docked task panel. */
+function Shell() {
+  const app = useApp();
+  const page = app.screen === 'settings' ? <DesktopSettings /> : <Screen />;
+  return (
+    <div className="st-shell flex h-full">
+      <Sidebar />
+      <main className="relative min-w-0 flex-1">
+        <div key={app.screen} className="anim-screen h-full">
+          {NARROW_PAGES.has(app.screen) ? <div className="mx-auto h-full max-w-[720px]">{page}</div> : page}
+        </div>
+      </main>
+      {app.editTaskId && <EditTaskSheet docked key={app.editTaskId} />}
+    </div>
+  );
+}
+
+const AUTH_SCREENS = new Set(['welcome', 'login', 'signup', 'reset']);
+
 function Root() {
   const app = useApp();
+  const wide = useWide();
   if (!app.booted) return <Splash />;
+  if (wide && app.account && !app.tour && !AUTH_SCREENS.has(app.screen)) {
+    return (
+      <>
+        <Shell />
+        {app.switcherOpen && <SwitchAccountModal />}
+        {app.categoryModal && <CategoryModal key={app.categoryModal.mode === 'edit' ? app.categoryModal.id : 'new'} />}
+        <ConfirmDialog />
+        <Toast />
+      </>
+    );
+  }
   return (
     <>
       {/* Re-keyed per screen so every navigation fades in. */}

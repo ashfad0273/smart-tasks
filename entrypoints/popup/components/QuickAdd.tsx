@@ -47,7 +47,7 @@ export default function QuickAdd({ open, onClose }: { open: boolean; onClose: ()
       title: parsed.title,
       dueAt: parsed.dueAt,
       priority: parsed.priority,
-      categoryId: cat?.id ?? (app.filter !== 'all' ? app.filter : null),
+      categoryId: cat?.id ?? (app.filter !== 'all' && app.filter !== 'none' ? app.filter : null),
     });
     setText('');
     setAdded(n => n + 1);

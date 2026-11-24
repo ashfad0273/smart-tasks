@@ -22,10 +22,14 @@ export interface ActivityEvent {
   /** Notification body for "notice" events; "category" for category events. */
   detail: string | null;
   by: Actor;
+  /** Name of the agent key that made the change (agent events only). */
+  agent: string | null;
 }
 
 export class UserHub extends DurableObject<Env> {
   private sql: SqlStorage;
+  /** Agent key name for the write in progress (set by push/notify, read by log). */
+  private who: string | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -47,6 +51,10 @@ export class UserHub extends DurableObject<Env> {
       );
       CREATE INDEX IF NOT EXISTS activity_at ON activity(at);
     `);
+    // Columns added later: which named agent key did it / sent it.
+    const cols = (t: string) => new Set(this.sql.exec<{ name: string }>(`PRAGMA table_info(${t})`).toArray().map(r => r.name));
+    if (!cols('activity').has('who')) this.sql.exec(`ALTER TABLE activity ADD COLUMN who TEXT`);
+    if (!cols('notices').has('sender')) this.sql.exec(`ALTER TABLE notices ADD COLUMN sender TEXT`);
     this.backfillActivity();
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
@@ -71,13 +79,14 @@ export class UserHub extends DurableObject<Env> {
 
   private log(at: number, type: ActivityType, taskId: string | null, title: string, by: Actor, detail: string | null = null): void {
     this.sql.exec(
-      `INSERT INTO activity (at, type, task_id, title, detail, by) VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO activity (at, type, task_id, title, detail, by, who) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       Math.min(at, Date.now()),
       type,
       taskId,
       title.slice(0, 200),
       detail,
       by,
+      by === 'agent' ? this.who : null,
     );
   }
 
@@ -118,19 +127,24 @@ export class UserHub extends DurableObject<Env> {
 
   /** Newest-first history page: tasks added, completed, reopened, deleted and agent notifications.
    *  `cursor` is the `next` value of the previous page ("<at>_<id>"), or empty for the newest. */
-  activity(cursor: string, limit: number): { events: ActivityEvent[]; next: string | null } {
+  activity(cursor: string, limit: number, taskId: string | null = null): { events: ActivityEvent[]; next: string | null } {
     const m = /^(\d+)_(\d+)$/.exec(cursor);
     const at = m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
     const id = m ? Number(m[2]) : Number.MAX_SAFE_INTEGER;
-    const rows = this.sql
-      .exec<{ id: number; at: number; type: string; task_id: string | null; title: string; detail: string | null; by: string }>(
-        `SELECT id, at, type, task_id, title, detail, by FROM activity WHERE at < ? OR (at = ? AND id < ?) ORDER BY at DESC, id DESC LIMIT ?`,
-        at,
-        at,
-        id,
-        limit + 1,
-      )
-      .toArray();
+    type Row = { id: number; at: number; type: string; task_id: string | null; title: string; detail: string | null; by: string; who: string | null };
+    const cols = `SELECT id, at, type, task_id, title, detail, by, who FROM activity`;
+    const rows = (
+      taskId
+        ? this.sql.exec<Row>(
+            `${cols} WHERE task_id = ? AND (at < ? OR (at = ? AND id < ?)) ORDER BY at DESC, id DESC LIMIT ?`,
+            taskId,
+            at,
+            at,
+            id,
+            limit + 1,
+          )
+        : this.sql.exec<Row>(`${cols} WHERE at < ? OR (at = ? AND id < ?) ORDER BY at DESC, id DESC LIMIT ?`, at, at, id, limit + 1)
+    ).toArray();
     const page = rows.slice(0, limit);
     const events = page.map(r => ({
       id: r.id,
@@ -140,13 +154,15 @@ export class UserHub extends DurableObject<Env> {
       title: r.title,
       detail: r.detail,
       by: r.by as Actor,
+      agent: r.who,
     }));
     const last = page[page.length - 1];
     return { events, next: rows.length > limit && last ? `${last.at}_${last.id}` : null };
   }
 
-  push(ops: SyncOp[], by: Actor = 'me'): { rev: number } {
+  push(ops: SyncOp[], by: Actor = 'me', who: string | null = null): { rev: number } {
     if (ops.length === 0) return { rev: this.rev() };
+    this.who = who;
     let rev = this.rev();
     const now = Date.now();
 
@@ -225,6 +241,31 @@ export class UserHub extends DurableObject<Env> {
     return { rev };
   }
 
+  /** Last 30 days: how many changes there were, and how many each named agent made. */
+  stats(): { since: number; total: number; agent: number; byAgent: Record<string, number> } {
+    const since = Date.now() - 30 * 86_400_000;
+    const total = this.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM activity WHERE at >= ? AND type != 'notice'`, since).one().n;
+    const rows = this.sql
+      .exec<{ who: string | null; n: number }>(
+        `SELECT who, COUNT(*) AS n FROM activity WHERE at >= ? AND by = 'agent' AND type != 'notice' GROUP BY who`,
+        since,
+      )
+      .toArray();
+    const byAgent: Record<string, number> = {};
+    let agent = 0;
+    for (const r of rows) {
+      agent += r.n;
+      byAgent[r.who ?? 'AI agent'] = (byAgent[r.who ?? 'AI agent'] ?? 0) + r.n;
+    }
+    return { since, total, agent, byAgent };
+  }
+
+  /** A key was renamed: History follows the new name. */
+  renameAgent(from: string, to: string): void {
+    this.sql.exec(`UPDATE activity SET who = ? WHERE who = ?`, to, from);
+    this.sql.exec(`UPDATE notices SET sender = ? WHERE sender = ?`, to, from);
+  }
+
   /* ── agent permissions ───────────────────────────────────────────── */
 
   agentPerms(): AgentPerms {
@@ -240,7 +281,7 @@ export class UserHub extends DurableObject<Env> {
   /* ── agent notifications ─────────────────────────────────────────── */
 
   /** Queue a desktop notification from an AI agent. Devices fetch it on their next check. */
-  notify(n: { title: string; message: string; url: string | null }): { id: number } | { error: string } {
+  notify(n: { title: string; message: string; url: string | null }, who: string | null = null): { id: number } | { error: string } {
     const now = Date.now();
     const recent = this.sql
       .exec<{ n: number }>(`SELECT COUNT(*) AS n FROM notices WHERE created_at > ?`, now - 3600_000)
@@ -248,14 +289,16 @@ export class UserHub extends DurableObject<Env> {
     if (recent >= NOTICE_HOURLY_LIMIT) return { error: `Limit of ${NOTICE_HOURLY_LIMIT} notifications per hour reached. Try again later.` };
     const id = this.sql
       .exec<{ id: number }>(
-        `INSERT INTO notices (title, message, url, created_at) VALUES (?, ?, ?, ?) RETURNING id`,
+        `INSERT INTO notices (title, message, url, created_at, sender) VALUES (?, ?, ?, ?, ?) RETURNING id`,
         n.title,
         n.message,
         n.url,
         now,
+        who,
       )
       .one().id;
     this.sql.exec(`DELETE FROM notices WHERE created_at < ?`, now - 7 * 86_400_000);
+    this.who = who;
     this.log(now, 'notice', null, n.title, 'agent', n.message);
     const msg = JSON.stringify({ type: 'notice' });
     for (const ws of this.ctx.getWebSockets()) {
@@ -269,16 +312,19 @@ export class UserHub extends DurableObject<Env> {
   }
 
   /** Notifications newer than `after` (a notice id) from the last day. */
-  notices(after: number): { latest: number; notices: Array<{ id: number; title: string; message: string; url: string | null; createdAt: number }> } {
+  notices(after: number): {
+    latest: number;
+    notices: Array<{ id: number; title: string; message: string; url: string | null; createdAt: number; from: string | null }>;
+  } {
     const latest = this.sql.exec<{ v: number | null }>(`SELECT MAX(id) AS v FROM notices`).one().v ?? 0;
     const notices = this.sql
-      .exec<{ id: number; title: string; message: string; url: string | null; created_at: number }>(
-        `SELECT id, title, message, url, created_at FROM notices WHERE id > ? AND created_at > ? ORDER BY id LIMIT 20`,
+      .exec<{ id: number; title: string; message: string; url: string | null; created_at: number; sender: string | null }>(
+        `SELECT id, title, message, url, created_at, sender FROM notices WHERE id > ? AND created_at > ? ORDER BY id LIMIT 20`,
         after,
         Date.now() - 86_400_000,
       )
       .toArray()
-      .map(r => ({ id: r.id, title: r.title, message: r.message, url: r.url, createdAt: r.created_at }));
+      .map(r => ({ id: r.id, title: r.title, message: r.message, url: r.url, createdAt: r.created_at, from: r.sender }));
     return { latest, notices };
   }
 

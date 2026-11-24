@@ -157,6 +157,10 @@ textarea:focus-visible {
   from { transform: translateY(16px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
+@keyframes dockIn {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
 @keyframes sheetUp {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }

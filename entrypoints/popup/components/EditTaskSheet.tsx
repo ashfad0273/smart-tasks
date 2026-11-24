@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, Check, ChevronDown, ExternalLink, GripVertical, Plus, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Bot, Check, ChevronDown, Copy, ExternalLink, GripVertical, Plus, Trash2, X } from 'lucide-react';
+import { api, type ActivityEvent } from '../../../lib/api';
 import {
   addDays,
   CATEGORY_COLORS,
@@ -30,8 +31,94 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 }
 
 
-export default function EditTaskSheet() {
+/** Desktop side panel: the same editor, docked to the right instead of a pop-up sheet. */
+function Dock({ onClose, label, children }: { onClose: () => void; label: string; children: React.ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      // Escape in a field that handles it itself (subtask rename) shouldn't close the panel.
+      const t = e.target as HTMLElement;
+      if (t.tagName === 'INPUT' && t.closest('[data-sub-row]')) return;
+      onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <aside
+      aria-label={label}
+      className="st-dock flex h-full w-[360px] shrink-0 flex-col border-l border-white/[.05] bg-[#0f181b]/80 animate-[dockIn_.32s_var(--ease-out)]"
+    >
+      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto pt-3.5">{children}</div>
+    </aside>
+  );
+}
+
+const VERB: Record<ActivityEvent['type'], string> = {
+  added: 'Added',
+  completed: 'Completed',
+  reopened: 'Reopened',
+  deleted: 'Deleted',
+  archived: 'Archived',
+  restored: 'Restored',
+  notice: 'Notification',
+};
+
+/** What happened to this task and who did it (you, or a named AI agent). */
+function TaskHistory({ task }: { task: Task }) {
   const app = useApp();
+  const session = app.account && !app.account.local ? app.account.token : null;
+  const [events, setEvents] = useState<ActivityEvent[] | null>(null);
+  useEffect(() => {
+    if (!session) return;
+    let live = true;
+    const t = setTimeout(
+      () =>
+        api.activity(session, '', 12, task.id).then(
+          r => live && setEvents(r.events),
+          () => live && setEvents([]),
+        ),
+      events ? 600 : 0, // after an edit, give the server a moment
+    );
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, task.id, task.completedAt, task.archivedAt, task.categoryId]);
+  if (!session) return null;
+  return (
+    <Section label="Activity">
+      {events === null ? (
+        <div className="skeleton h-14 rounded-xl" />
+      ) : events.length === 0 ? (
+        <p className="px-1 text-[11.5px] text-mut">Nothing recorded yet.</p>
+      ) : (
+        <ol className="space-y-1">
+          {events.map(e => (
+            <li key={e.id} className="flex items-baseline gap-2 px-1 text-[11.5px]">
+              <span className="w-[92px] shrink-0 tabular-nums text-mut">{formatStamp(e.at)}</span>
+              <span className="min-w-0 flex-1 text-txt/85">
+                {VERB[e.type]} by{' '}
+                {e.by === 'agent' ? (
+                  <span className="inline-flex items-center gap-0.5 font-semibold text-pop">
+                    <Bot size={10} /> {e.agent || 'AI agent'}
+                  </span>
+                ) : (
+                  'you'
+                )}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </Section>
+  );
+}
+
+export default function EditTaskSheet({ docked = false }: { docked?: boolean }) {
+  const app = useApp();
+  const Wrap = docked ? Dock : Sheet;
   const task = app.allTasks.find(t => t.id === app.editTaskId);
 
   const [title, setTitle] = useState(task?.title ?? '');
@@ -152,10 +239,26 @@ export default function EditTaskSheet() {
   };
 
   return (
-    <Sheet onClose={() => void requestClose()} label="Edit task">
+    <Wrap onClose={() => void requestClose()} label="Edit task">
       <div className="px-4">
         <div className="flex items-center justify-between pb-2">
-          <h2 className="text-base font-semibold">Edit task</h2>
+          {docked ? (
+            <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-mut">
+              {(() => {
+                const c = app.categoryById(categoryId);
+                return c ? (
+                  <>
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.color }} />
+                    <span className="truncate">{c.name}</span>
+                  </>
+                ) : (
+                  'No category'
+                );
+              })()}
+            </span>
+          ) : (
+            <h2 className="text-base font-semibold">Edit task</h2>
+          )}
           <button onClick={() => void requestClose()} aria-label="Close" className="press rounded-lg p-1 text-mut hover:text-txt">
             <X size={16} />
           </button>
@@ -389,6 +492,8 @@ export default function EditTaskSheet() {
           </div>
         </Section>
 
+        {docked && <TaskHistory task={task} />}
+
         {task && (
           <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px] text-mut">
             <span className="inline-flex items-center gap-1.5">
@@ -416,11 +521,21 @@ export default function EditTaskSheet() {
           >
             {task.archivedAt ? <ArchiveRestore size={13} /> : <Archive size={13} />} {task.archivedAt ? 'Restore' : 'Archive'}
           </button>
+          {docked && (
+            <button
+              onClick={() => void flush().then(() => app.duplicateTask(task.id))}
+              title="Make a copy with the same details"
+              aria-label="Duplicate"
+              className="press inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3 py-2.5 text-xs font-semibold text-mut hover:border-acc/40 hover:text-acc"
+            >
+              <Copy size={13} />
+            </button>
+          )}
           <button onClick={() => void requestClose()} className="press btn-acc flex-1 rounded-full py-2.5 text-sm font-semibold">
             Done
           </button>
         </div>
       </div>
-    </Sheet>
+    </Wrap>
   );
 }

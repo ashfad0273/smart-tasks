@@ -67,6 +67,24 @@ export interface DeviceSession {
 export interface SessionsResult {
   sessions: DeviceSession[];
   agent: { hint: string; createdAt: number; lastUsed: number | null } | null;
+  /** Every named agent key (newer API; missing on old servers). */
+  agents?: AgentKey[];
+}
+
+export interface AgentStats {
+  since: number;
+  total: number;
+  agent: number;
+  byAgent: Record<string, number>;
+}
+
+/** A named personal key an AI app uses to reach /mcp. */
+export interface AgentKey {
+  id: string;
+  name: string;
+  hint: string;
+  createdAt: number;
+  lastUsed: number | null;
 }
 
 export interface AgentNotice {
@@ -75,6 +93,8 @@ export interface AgentNotice {
   message: string;
   url: string | null;
   createdAt: number;
+  /** Name of the agent key that sent it. */
+  from?: string | null;
 }
 
 export interface InboxItem extends AgentNotice {
@@ -94,6 +114,8 @@ export interface ActivityEvent {
   title: string;
   detail: string | null;
   by: 'me' | 'agent';
+  /** Which named agent key made the change (agent events only). */
+  agent?: string | null;
 }
 
 const post = (body: unknown) => ({ method: 'POST', body: JSON.stringify(body) });
@@ -113,10 +135,12 @@ export const api = {
   pull: (token: string, since: number) =>
     call<{ rev: number; changes: Change[]; more: boolean }>(`/v1/sync?since=${since}`, { token }),
   push: (token: string, ops: SyncOp[]) => call<{ rev: number }>('/v1/sync', { ...post({ ops }), token }),
-  agentToken: (token: string) =>
-    call<{ token: { hint: string; createdAt: number; lastUsed: number | null } | null }>('/v1/agent-token', { token }),
-  createAgentToken: (token: string, timeZone: string) => call<{ token: string }>('/v1/agent-token', { ...post({ timeZone }), token }),
-  revokeAgentToken: (token: string) => call<{ ok: true }>('/v1/agent-token', { method: 'DELETE', token }),
+  agentKeys: (token: string) => call<{ keys: AgentKey[] }>('/v1/agent-keys', { token }),
+  createAgentKey: (token: string, name: string, timeZone: string) =>
+    call<{ key: AgentKey; token: string }>('/v1/agent-keys', { ...post({ name, timeZone }), token }),
+  renameAgentKey: (token: string, id: string, name: string) =>
+    call<{ key: AgentKey }>(`/v1/agent-keys/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ name }), token }),
+  revokeAgentKey: (token: string, id: string) => call<{ ok: true }>(`/v1/agent-keys/${encodeURIComponent(id)}`, { method: 'DELETE', token }),
   agentPerms: (token: string) => call<{ permissions: AgentPerms }>('/v1/agent-permissions', { token }),
   setAgentPerms: (token: string, permissions: Partial<AgentPerms>) =>
     call<{ permissions: AgentPerms }>('/v1/agent-permissions', { method: 'PATCH', body: JSON.stringify({ permissions }), token }),
@@ -124,7 +148,12 @@ export const api = {
   signOutDevice: (token: string, id: string) => call<{ ok: true }>(`/v1/sessions/${encodeURIComponent(id)}`, { method: 'DELETE', token }),
   signOutOthers: (token: string) => call<{ ok: true; signedOut: number }>('/v1/sessions?others=1', { method: 'DELETE', token }),
   notices: (token: string, after: number) => call<{ latest: number; notices: AgentNotice[] }>(`/v1/notices?after=${after}`, { token }),
-  activity: (token: string, cursor = '', limit = 50) =>
-    call<{ events: ActivityEvent[]; next: string | null }>(`/v1/activity?cursor=${encodeURIComponent(cursor)}&limit=${limit}`, { token }),
+  activity: (token: string, cursor = '', limit = 50, taskId?: string) =>
+    call<{ events: ActivityEvent[]; next: string | null }>(
+      `/v1/activity?cursor=${encodeURIComponent(cursor)}&limit=${limit}${taskId ? `&task=${encodeURIComponent(taskId)}` : ''}`,
+      { token },
+    ),
+  /** Last 30 days of changes, and how many each named agent made. */
+  stats: (token: string) => call<AgentStats>('/v1/stats', { token }),
   wsUrl: (token: string) => `${API_URL.replace(/^http/, 'ws')}/v1/ws?token=${encodeURIComponent(token)}`,
 };
