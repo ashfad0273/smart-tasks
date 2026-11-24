@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BellRing, Bot, Check, ChevronLeft, ExternalLink, History, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, BellRing, Bot, Check, ChevronLeft, ExternalLink, History, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { api, ApiError, type ActivityEvent, type ActivityType, type InboxItem } from '../../../lib/api';
 import { storageGet, storageSet } from '../../../lib/ext';
 import { inboxKey } from '../../../lib/keys';
@@ -20,6 +20,8 @@ const META: Record<ActivityType, { label: string; Icon: typeof Plus; tone: strin
   completed: { label: 'Completed', Icon: Check, tone: 'border-acc/25 bg-acc/10 text-acc' },
   reopened: { label: 'Reopened', Icon: RotateCcw, tone: 'border-sun/25 bg-sun/10 text-sun' },
   deleted: { label: 'Deleted', Icon: Trash2, tone: 'border-danger/25 bg-danger/10 text-danger' },
+  archived: { label: 'Archived', Icon: Archive, tone: 'border-white/[.07] bg-white/[.04] text-mut' },
+  restored: { label: 'Restored', Icon: ArchiveRestore, tone: 'border-acc/25 bg-acc/10 text-acc' },
   notice: { label: 'Notification', Icon: BellRing, tone: 'border-pop/30 bg-pop/15 text-pop' },
 };
 
@@ -65,7 +67,7 @@ export default function ActivityScreen() {
   );
 
   // Fetch history; refresh it whenever tasks change (here or on another device).
-  const taskSig = app.tasks.length + ':' + app.tasks.reduce((m, t) => Math.max(m, t.updatedAt), 0);
+  const taskSig = app.allTasks.length + ':' + app.allTasks.reduce((m, t) => Math.max(m, t.updatedAt), 0);
   useEffect(() => {
     void load();
   }, [load, taskSig]);
@@ -92,12 +94,12 @@ export default function ActivityScreen() {
     if (session) return events ?? [];
     const out: ActivityEvent[] = [];
     let n = 0;
-    for (const t of app.tasks) {
+    for (const t of app.allTasks) {
       out.push({ id: ++n, at: t.createdAt, type: 'added', taskId: t.id, title: t.title, detail: null, by: 'me' });
       if (t.completedAt) out.push({ id: ++n, at: t.completedAt, type: 'completed', taskId: t.id, title: t.title, detail: null, by: 'me' });
     }
     return out.sort((a, b) => b.at - a.at);
-  }, [session, events, app.tasks]);
+  }, [session, events, app.allTasks]);
 
   const shown = all.filter(e =>
     filter === 'all' ? true : filter === 'agent' ? e.by === 'agent' : filter === 'completed' ? e.type === 'completed' : e.type === filter,
@@ -113,7 +115,7 @@ export default function ActivityScreen() {
 
   const inboxFor = (e: ActivityEvent) =>
     e.type === 'notice' ? inbox.find(i => i.title === e.title && Math.abs(i.createdAt - e.at) < 120_000) : undefined;
-  const liveTask = (id: string | null) => (id ? app.tasks.find(t => t.id === id) : undefined);
+  const liveTask = (id: string | null) => (id ? app.allTasks.find(t => t.id === id) : undefined);
 
   const counts = {
     added: all.filter(e => e.type === 'added').length,
@@ -201,7 +203,7 @@ export default function ActivityScreen() {
                             <span className="mt-0.5 block text-[11.5px] leading-snug text-mut">{e.detail}</span>
                           )}
                           <span className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-mut/80">
-                            <span>{m.label}</span>
+                            <span>{e.detail === 'category' ? `Category ${m.label.toLowerCase()}` : m.label}</span>
                             <span className="text-mut/40">·</span>
                             <span className="tabular-nums">{formatTime(e.at)}</span>
                             {e.by === 'agent' && (

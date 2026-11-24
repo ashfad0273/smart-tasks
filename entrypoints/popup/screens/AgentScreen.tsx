@@ -1,17 +1,27 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BellRing, Bot, Check, ChevronLeft, Copy, KeyRound, Volume2 } from 'lucide-react';
+import { BellRing, Bot, Check, ChevronLeft, Copy, KeyRound, ShieldCheck, Volume2 } from 'lucide-react';
 import { storageGet, storageSet } from '../../../lib/ext';
 import { AGENT_CLIENT_KEY, AGENT_NOTIFY_KEY, AGENT_SOUND_KEY } from '../../../lib/keys';
 import { AGENT_CLIENTS } from '../../../lib/agents';
 import { cx } from '../../../lib/utils';
 import ScrollRow from '../components/ScrollRow';
 import { Toggle } from './SettingsScreen';
-import { api, API_URL, ApiError } from '../../../lib/api';
+import { api, API_URL, ApiError, type AgentPerm, type AgentPerms } from '../../../lib/api';
 import { useApp } from '../state/AppContext';
 
 type Info = { hint: string; createdAt: number; lastUsed: number | null } | null;
 
 const MCP_URL = `${API_URL}/mcp`;
+
+const PERMS: Array<{ id: AgentPerm; label: string; sub: string }> = [
+  { id: 'add', label: 'Add tasks', sub: 'Create new tasks and subtasks.' },
+  { id: 'edit', label: 'Edit tasks', sub: 'Change titles, notes, due dates, priority and category.' },
+  { id: 'complete', label: 'Mark tasks done', sub: 'Tick tasks off, or back to not done.' },
+  { id: 'archive', label: 'Archive and restore', sub: 'Hide tasks and categories, and bring them back.' },
+  { id: 'categories', label: 'Manage categories', sub: 'Create categories, and delete them if Delete is on too.' },
+  { id: 'delete', label: 'Delete', sub: 'Permanently remove tasks and categories.' },
+  { id: 'notify', label: 'Send notifications', sub: 'Ping you on your computers.' },
+];
 
 function when(ms: number | null): string {
   if (!ms) return 'never';
@@ -30,6 +40,7 @@ export default function AgentScreen() {
   const [notifyOn, setNotifyOn] = useState<boolean | null>(null);
   const [soundOn, setSoundOn] = useState<boolean | null>(null);
   const [clientId, setClientId] = useState(AGENT_CLIENTS[0].id);
+  const [perms, setPerms] = useState<AgentPerms | null>(null);
 
   useEffect(() => {
     void storageGet<string>(AGENT_CLIENT_KEY, AGENT_CLIENTS[0].id).then(id => {
@@ -47,7 +58,20 @@ export default function AgentScreen() {
   useEffect(() => {
     if (!session) return;
     api.agentToken(session).then(r => setInfo(r.token), fail);
+    api.agentPerms(session).then(r => setPerms(r.permissions), fail);
   }, [session, fail]);
+
+  const setPerm = async (id: AgentPerm, on: boolean) => {
+    if (!session || !perms) return;
+    const before = perms;
+    setPerms({ ...perms, [id]: on });
+    try {
+      setPerms((await api.setAgentPerms(session, { [id]: on })).permissions);
+    } catch (e) {
+      setPerms(before);
+      fail(e);
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !app.confirmData && app.setScreen('settings');
@@ -131,7 +155,7 @@ export default function AgentScreen() {
             <Bot size={17} />
           </span>
           <p className="text-[12.5px] leading-relaxed text-mut">
-            Let Claude or another AI agent add, edit and complete your tasks, and send you notifications. Changes show up here instantly.
+            Let Claude or another AI agent add, edit, complete and archive your tasks, and send you notifications. You choose what it may do. Changes show up here instantly.
           </p>
         </div>
 
@@ -181,6 +205,31 @@ export default function AgentScreen() {
                 >
                   {busy ? 'Creating...' : info ? 'Make a new key' : 'Create access key'}
                 </button>
+              )}
+            </section>
+
+            <section className="anim-card rounded-2xl border border-line bg-surface">
+              <div className="flex items-center gap-2.5 px-3.5 pb-1 pt-3.5">
+                <ShieldCheck size={14} className="shrink-0 text-mut" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-medium">Permissions</p>
+                  <p className="text-[11px] text-mut">What AI agents may do. Applies to every AI app, right away.</p>
+                </div>
+              </div>
+              {perms === null ? (
+                <div className="skeleton mx-3.5 my-3 h-24 rounded-xl" />
+              ) : (
+                <ul className="divide-y divide-white/[.04] px-3.5 pb-1.5">
+                  {PERMS.map(p => (
+                    <li key={p.id} className="flex items-center gap-3 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className={cx('text-[12.5px]', p.id === 'delete' && perms.delete && 'text-danger')}>{p.label}</p>
+                        <p className="text-[10.5px] leading-snug text-mut">{p.sub}</p>
+                      </div>
+                      <Toggle label={p.label} on={perms[p.id]} onChange={v => void setPerm(p.id, v)} />
+                    </li>
+                  ))}
+                </ul>
               )}
             </section>
 

@@ -1,5 +1,5 @@
 import { hashPassword, randomToken, sha256, verifyGoogleIdToken, verifyPassword } from './crypto';
-import { BadRequest, parseOps } from './model';
+import { BadRequest, parseOps, parsePerms } from './model';
 import { handleMcp } from './mcp';
 import { PRIVACY_HTML } from './privacy';
 
@@ -24,6 +24,8 @@ export { UserHub } from './hub';
  *   GET    /v1/agent-token            → {token: {hint, createdAt, lastUsed} | null}
  *   POST   /v1/agent-token            {timeZone} → {token: "stk_…"}  (replaces any old one)
  *   DELETE /v1/agent-token            revoke
+ *   GET    /v1/agent-permissions      → {permissions: {add, edit, complete, archive, delete, categories, notify}}
+ *   PATCH  /v1/agent-permissions      {permissions: {…partial}} → {permissions}
  *   GET    /v1/sessions               → {sessions: [{id, device, location, createdAt, lastSeen, current, online}], agent}
  *   DELETE /v1/sessions/:id           sign that device out
  *   DELETE /v1/sessions?others=1      sign out every other device
@@ -353,7 +355,8 @@ async function route(req: Request, env: Env): Promise<Response> {
 
   if (p === '/mcp') {
     const { user, tz } = await agentAuth(env, bearer(req));
-    return handleMcp(req, { hub: hub(env, user.id), name: user.name, tz }, { 'Cache-Control': 'no-store', ...CORS });
+    const h = hub(env, user.id);
+    return handleMcp(req, { hub: h, name: user.name, tz, perms: await h.agentPerms() }, { 'Cache-Control': 'no-store', ...CORS });
   }
 
   // WebSocket: browsers can't set headers on WS, so the token rides in the query.
@@ -440,6 +443,14 @@ async function route(req: Request, env: Env): Promise<Response> {
     if (!r.meta.changes) throw new HttpError(404, 'not-found', 'That device is already signed out.');
     await hub(env, user.id).kick([sm[1]]);
     return json({ ok: true });
+  }
+  if (p === '/v1/agent-permissions') {
+    const h = hub(env, user.id);
+    if (m === 'GET') return json({ permissions: await h.agentPerms() });
+    if (m === 'PATCH') {
+      const next = parsePerms(await readJson<unknown>(req), await h.agentPerms());
+      return json({ permissions: await h.setAgentPerms(next) });
+    }
   }
   if (p === '/v1/agent-token') {
     if (m === 'GET') {

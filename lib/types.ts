@@ -19,6 +19,8 @@ export interface Task {
   dueAt: number | null;
   /** epoch ms of completion, null = pending */
   completedAt: number | null;
+  /** epoch ms when archived (hidden, not deleted); null/missing = active */
+  archivedAt?: number | null;
   subtasks: Subtask[];
   /** sort key (descending) */
   order: number;
@@ -34,6 +36,8 @@ export interface Category {
   color: string;
   order: number;
   createdAt: number;
+  /** epoch ms when archived; its tasks are hidden with it */
+  archivedAt?: number | null;
 }
 
 export interface AuthUser {

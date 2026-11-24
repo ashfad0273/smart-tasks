@@ -71,6 +71,7 @@ function cleanTask(d: Record<string, unknown>): Record<string, unknown> {
         break;
       case 'dueAt':
       case 'completedAt':
+      case 'archivedAt':
         out[k] = numOrNull(v, k);
         break;
       case 'order':
@@ -105,6 +106,9 @@ function cleanCategory(d: Record<string, unknown>): Record<string, unknown> {
         if (typeof v !== 'string' || !COLOR_RE.test(v)) throw new BadRequest('bad color');
         out.color = v;
         break;
+      case 'archivedAt':
+        out.archivedAt = numOrNull(v, k);
+        break;
       case 'order':
       case 'createdAt':
         if (!isNum(v)) throw new BadRequest(`${k} must be a number`);
@@ -125,6 +129,7 @@ export function taskDefaults(now: number): Record<string, unknown> {
     priority: null,
     dueAt: null,
     completedAt: null,
+    archivedAt: null,
     subtasks: [],
     order: now,
     createdAt: now,
@@ -133,7 +138,7 @@ export function taskDefaults(now: number): Record<string, unknown> {
 }
 
 export function categoryDefaults(now: number): Record<string, unknown> {
-  return { name: 'Untitled', color: '#22c55e', order: now, createdAt: now };
+  return { name: 'Untitled', color: '#22c55e', order: now, createdAt: now, archivedAt: null };
 }
 
 export function parseOps(body: unknown): SyncOp[] {
@@ -149,4 +154,28 @@ export function parseOps(body: unknown): SyncOp[] {
     const data = o.kind === 'task' ? cleanTask(o.data as Record<string, unknown>) : cleanCategory(o.data as Record<string, unknown>);
     return { kind: o.kind, id: o.id, op: 'upsert', data };
   });
+}
+
+/* ── what AI agents may do (set by the user in Settings → AI agent) ─────── */
+
+export const AGENT_PERMS = ['add', 'edit', 'complete', 'archive', 'delete', 'categories', 'notify'] as const;
+export type AgentPerm = (typeof AGENT_PERMS)[number];
+export type AgentPerms = Record<AgentPerm, boolean>;
+
+/** Everything allowed until the user turns something off. */
+export const DEFAULT_AGENT_PERMS: AgentPerms = Object.fromEntries(AGENT_PERMS.map(p => [p, true])) as AgentPerms;
+
+export const permsToBits = (p: AgentPerms) => AGENT_PERMS.reduce((n, k, i) => (p[k] ? n | (1 << i) : n), 0);
+export const bitsToPerms = (n: number) => Object.fromEntries(AGENT_PERMS.map((k, i) => [k, (n & (1 << i)) !== 0])) as AgentPerms;
+
+export function parsePerms(body: unknown, current: AgentPerms): AgentPerms {
+  const src = (body as { permissions?: unknown })?.permissions;
+  if (!src || typeof src !== 'object') throw new BadRequest('permissions must be an object');
+  const out = { ...current };
+  for (const [k, v] of Object.entries(src as Record<string, unknown>)) {
+    if (!(AGENT_PERMS as readonly string[]).includes(k)) continue;
+    if (typeof v !== 'boolean') throw new BadRequest(`${k} must be true or false`);
+    out[k as AgentPerm] = v;
+  }
+  return out;
 }

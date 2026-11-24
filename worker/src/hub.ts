@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { BadRequest, categoryDefaults, LIMITS, taskDefaults, type Change, type SyncOp } from './model';
+import { BadRequest, bitsToPerms, categoryDefaults, DEFAULT_AGENT_PERMS, LIMITS, permsToBits, taskDefaults, type AgentPerms, type Change, type SyncOp } from './model';
 
 /**
  * One instance per user. Holds the user's tasks + categories in its private
@@ -12,14 +12,14 @@ import { BadRequest, categoryDefaults, LIMITS, taskDefaults, type Change, type S
 const NOTICE_HOURLY_LIMIT = 30;
 
 export type Actor = 'me' | 'agent';
-export type ActivityType = 'added' | 'completed' | 'reopened' | 'deleted' | 'notice';
+export type ActivityType = 'added' | 'completed' | 'reopened' | 'deleted' | 'archived' | 'restored' | 'notice';
 export interface ActivityEvent {
   id: number;
   at: number;
   type: ActivityType;
   taskId: string | null;
   title: string;
-  /** Notification body for "notice" events. */
+  /** Notification body for "notice" events; "category" for category events. */
   detail: string | null;
   by: Actor;
 }
@@ -174,6 +174,7 @@ export class UserHub extends DurableObject<Env> {
           write(op.kind, op.id, null);
           if (op.kind === 'task') this.log(now, 'deleted', op.id, String(JSON.parse(existing.data ?? '{}').title ?? ''), by);
           if (op.kind === 'category') {
+            this.log(now, 'deleted', null, String(JSON.parse(existing.data ?? '{}').name ?? ''), by, 'category');
             // Orphaned tasks become uncategorized.
             const tasks = this.sql
               .exec<{ id: string; data: string }>(
@@ -207,6 +208,12 @@ export class UserHub extends DurableObject<Env> {
           if (was == null && typeof is === 'number') this.log(is, 'completed', op.id, title, by);
           else if (was != null && is == null) this.log(now, 'reopened', op.id, title, by);
         }
+        const wasArch = existing ? base.archivedAt != null : false;
+        const isArch = next.archivedAt != null;
+        if (wasArch !== isArch) {
+          const label = String((op.kind === 'task' ? next.title : next.name) ?? '');
+          this.log(now, isArch ? 'archived' : 'restored', op.kind === 'task' ? op.id : null, label, by, op.kind === 'category' ? 'category' : null);
+        }
       }
       // Keep about a year of history.
       this.sql.exec(`DELETE FROM activity WHERE at < ?`, now - 365 * 86_400_000);
@@ -216,6 +223,18 @@ export class UserHub extends DurableObject<Env> {
 
     this.broadcast(rev);
     return { rev };
+  }
+
+  /* ── agent permissions ───────────────────────────────────────────── */
+
+  agentPerms(): AgentPerms {
+    const row = this.sql.exec<{ v: number }>(`SELECT v FROM meta WHERE k = 'agent_perms'`).toArray()[0];
+    return row ? bitsToPerms(row.v) : { ...DEFAULT_AGENT_PERMS };
+  }
+
+  setAgentPerms(p: AgentPerms): AgentPerms {
+    this.sql.exec(`INSERT INTO meta (k, v) VALUES ('agent_perms', ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v`, permsToBits(p));
+    return this.agentPerms();
   }
 
   /* ── agent notifications ─────────────────────────────────────────── */

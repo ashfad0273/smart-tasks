@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, Pencil, Plus, Trash2, Tags } from 'lucide-react';
+import { Archive, Check, ChevronLeft, Pencil, Plus, Trash2, Tags } from 'lucide-react';
 import type { Category } from '../../../lib/types';
 import { useApp } from '../state/AppContext';
 import EmptyState from '../components/EmptyState';
@@ -31,7 +31,19 @@ export default function CategoriesScreen() {
           <ChevronLeft size={18} />
         </button>
         <h1 className="text-sm font-semibold">Categories</h1>
-        <span className="w-7" />
+        <button
+          onClick={() => app.setScreen('archive')}
+          aria-label="Archive"
+          title="Archive"
+          className="press relative rounded-lg p-1.5 text-mut hover:text-txt"
+        >
+          <Archive size={16} />
+          {app.archivedCategories.length > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-white/10 px-0.5 text-[9px] font-semibold text-txt">
+              {app.archivedCategories.length}
+            </span>
+          )}
+        </button>
       </header>
 
       <div className="hide-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto px-5">
@@ -69,6 +81,14 @@ export default function CategoriesScreen() {
                   className="press shrink-0 rounded-lg p-1.5 text-mut hover:bg-white/[.05] hover:text-acc"
                 >
                   <Pencil size={14} />
+                </button>
+                <button
+                  onClick={() => void app.archiveCategory(c.id)}
+                  aria-label={`Archive ${c.name}`}
+                  title="Archive with its tasks"
+                  className="press shrink-0 rounded-lg p-1.5 text-mut hover:bg-white/[.05] hover:text-acc"
+                >
+                  <Archive size={14} />
                 </button>
                 <button
                   onClick={() => void deleteCat(c)}

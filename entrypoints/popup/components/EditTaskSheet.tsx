@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ExternalLink, GripVertical, Plus, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, ChevronDown, ExternalLink, GripVertical, Plus, Trash2, X } from 'lucide-react';
 import {
   addDays,
   CATEGORY_COLORS,
@@ -32,7 +32,7 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 export default function EditTaskSheet() {
   const app = useApp();
-  const task = app.tasks.find(t => t.id === app.editTaskId);
+  const task = app.allTasks.find(t => t.id === app.editTaskId);
 
   const [title, setTitle] = useState(task?.title ?? '');
   const [notes, setNotes] = useState(task?.notes ?? '');
@@ -408,6 +408,13 @@ export default function EditTaskSheet() {
             className="press inline-flex shrink-0 items-center gap-1.5 rounded-full border border-danger/30 px-3.5 py-2.5 text-xs font-semibold text-danger hover:bg-danger/10"
           >
             <Trash2 size={13} /> Delete
+          </button>
+          <button
+            onClick={() => void app.archiveTask(task.id, !task.archivedAt)}
+            title={task.archivedAt ? 'Bring back to your list' : 'Hide from your list without deleting'}
+            className="press inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 py-2.5 text-xs font-semibold text-mut hover:border-acc/40 hover:text-acc"
+          >
+            {task.archivedAt ? <ArchiveRestore size={13} /> : <Archive size={13} />} {task.archivedAt ? 'Restore' : 'Archive'}
           </button>
           <button onClick={() => void requestClose()} className="press btn-acc flex-1 rounded-full py-2.5 text-sm font-semibold">
             Done

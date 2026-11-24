@@ -4,7 +4,7 @@ import { storageGet, storageSet } from '../lib/ext';
 import { api, SITE_URL, type InboxItem } from '../lib/api';
 import { AGENT_NOTIFY_KEY, AGENT_SOUND_KEY, inboxKey, NOTICE_LINKS_KEY, OPEN_SCREEN_KEY, UPDATE_KEY, UPDATE_NOTIFIED_KEY, UPDATED_KEY, noticesSeenKey, REGISTRY_KEY, REMINDERS_ENABLED_KEY, REMINDERS_KEY, REMINDERS_SENT_KEY, baseKey, outboxKey } from '../lib/keys';
 import { GRACE_MS, writeReminders, type Reminder } from '../lib/reminders';
-import { activeAccount, loadRegistry, mutate, newId, readView, sync } from '../lib/store';
+import { activeAccount, activeTasks, loadRegistry, mutate, newId, readView, sync } from '../lib/store';
 import { isSameDay } from '../lib/utils';
 import { desktopHandles } from '../lib/desktop';
 import { currentVersion, download, fetchLatest, hasAccess, install, isOurFolder, isUnpacked, loadFolder, newer, type UpdateInfo } from '../lib/updater';
@@ -51,7 +51,7 @@ export default defineBackground(() => {
 
   async function refreshDerived(): Promise<void> {
     const acc = await activeAccount();
-    const tasks = acc ? Object.values((await readView(acc.uid)).tasks) : [];
+    const tasks = acc ? activeTasks(await readView(acc.uid)) : [];
     await writeReminders(tasks);
     const now = Date.now();
     const due = tasks.filter(t => !t.completedAt && t.dueAt != null && (t.dueAt < now || isSameDay(t.dueAt, now))).length;

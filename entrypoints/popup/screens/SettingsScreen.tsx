@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bell, Bot, ChevronLeft, Compass, MonitorSmartphone, Download, Keyboard, LogOut, Pencil, RefreshCw, Tags, Trash2, Users } from 'lucide-react';
+import { Archive, Bell, Bot, ChevronLeft, Compass, MonitorSmartphone, Download, Keyboard, LogOut, Pencil, RefreshCw, Tags, Trash2, Users } from 'lucide-react';
 import { API_URL, SITE_URL } from '../../../lib/api';
 import { manifestVersion, onStorageChange, storageGet, storageSet } from '../../../lib/ext';
 import { REMINDERS_ENABLED_KEY, REMINDERS_KEY, UPDATE_KEY } from '../../../lib/keys';
@@ -206,6 +206,15 @@ export default function SettingsScreen() {
           <Row icon={<Tags size={14} />} label="Categories">
             <button onClick={() => app.setScreen('categories')} className="press text-[12px] font-medium text-acc hover:underline">
               Manage
+            </button>
+          </Row>
+          <Row
+            icon={<Archive size={14} />}
+            label="Archive"
+            sub={app.archivedTasks.length + app.archivedCategories.length > 0 ? `${app.archivedTasks.length} task${app.archivedTasks.length === 1 ? '' : 's'}, ${app.archivedCategories.length} categor${app.archivedCategories.length === 1 ? 'y' : 'ies'}` : 'Nothing archived'}
+          >
+            <button onClick={() => app.setScreen('archive')} className="press text-[12px] font-medium text-acc hover:underline">
+              Open
             </button>
           </Row>
           {!acc?.local && (

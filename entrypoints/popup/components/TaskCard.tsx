@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, CircleCheck, Clock, ExternalLink, ListChecks, Pencil, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, CircleCheck, Clock, ExternalLink, ListChecks, Pencil, Trash2 } from 'lucide-react';
 import { cx, formatDue, formatStamp, PRIORITY_META } from '../../../lib/utils';
 import type { Task } from '../../../lib/types';
 import { useApp } from '../state/AppContext';
@@ -181,6 +181,14 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
           className="press rounded-md p-1.5 text-mut hover:text-acc"
         >
           <Pencil size={13} />
+        </button>
+        <button
+          aria-label={`${task.archivedAt ? 'Restore' : 'Archive'} "${task.title}"`}
+          title={task.archivedAt ? 'Restore' : 'Archive'}
+          onClick={() => void app.archiveTask(task.id, !task.archivedAt)}
+          className="press rounded-md p-1.5 text-mut hover:text-acc"
+        >
+          {task.archivedAt ? <ArchiveRestore size={13} /> : <Archive size={13} />}
         </button>
         <button
           aria-label={`Delete "${task.title}"`}

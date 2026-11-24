@@ -97,6 +97,11 @@ function applyChanges(set: DataSet, changes: Change[], rev: number): DataSet {
 
 /* ── reading ──────────────────────────────────────────────────────────── */
 
+/** Tasks that are not archived and not in an archived category. */
+export function activeTasks(set: Pick<DataSet, 'tasks' | 'categories'>): Task[] {
+  return Object.values(set.tasks).filter(t => !t.archivedAt && !(t.categoryId && set.categories[t.categoryId]?.archivedAt));
+}
+
 export async function readView(uid: string): Promise<DataSet> {
   const [base, outbox] = await Promise.all([
     storageGet<DataSet>(baseKey(uid), EMPTY_SET),

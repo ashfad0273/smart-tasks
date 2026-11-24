@@ -2,6 +2,17 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## 1.6.0 - 2026-11-24
+
+### Added
+- **Archive.** Archive any task or category to hide it without deleting it. Archiving a category hides its tasks too. Find everything in Settings, Archive, where you can restore or delete it.
+- **AI permissions.** Choose what AI agents may do: add, edit, mark done, archive, manage categories, delete and send notifications. It applies to every AI app right away, and switched-off actions disappear from the agent's tools.
+- **AI can archive and delete categories.** Agents can archive and restore tasks and categories, and delete a category when you ask (its tasks are kept).
+
+### Changed
+- Activity shows archived, restored and deleted categories, and archived tasks.
+- Archived tasks don't send reminders or count on the icon badge.
+
 ## 1.5.1 - 2026-11-24
 
 ### Fixed

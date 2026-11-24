@@ -139,6 +139,33 @@ if (dmgName && tarName) {
   console.warn(`No macOS ${version} build in desktop/release/macos (run \`npm run desktop:mac:fetch\` after the GitHub build).`);
 }
 
+// No desktop build on this machine (the extension can be released on its own):
+// keep the desktop app that is already published, so its downloads and the
+// desktop updater's latest.json don't disappear with this deploy.
+let keptDesktop = null;
+if (!Object.keys(platforms).length) {
+  const res = await fetch(`${SITE}/desktop/latest.json`, { cache: 'no-store' }).catch(() => null);
+  if (res?.ok) {
+    keptDesktop = await res.json();
+    const v = keptDesktop.version;
+    const grab = async (name, ...aliases) => {
+      const r = await fetch(`${SITE}/desktop/${name}`);
+      if (!r.ok) return null;
+      mkdirSync(deskOut, { recursive: true });
+      const buf = Buffer.from(await r.arrayBuffer());
+      for (const n of [name, ...aliases]) writeFileSync(join(deskOut, n), buf);
+      return { href: `/desktop/${name}`, size: `${(buf.length / 1024 / 1024).toFixed(1)} MB` };
+    };
+    if (keptDesktop.platforms['windows-x86_64']) dl.win = await grab(`smart-tasks-setup-${v}.exe`, 'smart-tasks-setup-latest.exe');
+    if (keptDesktop.platforms['darwin-aarch64']) {
+      dl.mac = await grab(`smart-tasks-${v}-mac.dmg`, 'smart-tasks-mac-latest.dmg');
+      await grab(`smart-tasks-${v}-mac.app.tar.gz`);
+    }
+    writeFileSync(join(deskOut, 'latest.json'), JSON.stringify(keptDesktop, null, 2));
+    console.warn(`Keeping the published desktop app ${v} (no desktop build for ${version} here).`);
+  }
+}
+
 // The updater's manifest lists whichever platforms are present.
 if (Object.keys(platforms).length) {
   writeFileSync(

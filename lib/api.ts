@@ -81,7 +81,11 @@ export interface InboxItem extends AgentNotice {
   read: boolean;
 }
 
-export type ActivityType = 'added' | 'completed' | 'reopened' | 'deleted' | 'notice';
+export type ActivityType = 'added' | 'completed' | 'reopened' | 'deleted' | 'archived' | 'restored' | 'notice';
+
+export const AGENT_PERMS = ['add', 'edit', 'complete', 'archive', 'delete', 'categories', 'notify'] as const;
+export type AgentPerm = (typeof AGENT_PERMS)[number];
+export type AgentPerms = Record<AgentPerm, boolean>;
 export interface ActivityEvent {
   id: number;
   at: number;
@@ -113,6 +117,9 @@ export const api = {
     call<{ token: { hint: string; createdAt: number; lastUsed: number | null } | null }>('/v1/agent-token', { token }),
   createAgentToken: (token: string, timeZone: string) => call<{ token: string }>('/v1/agent-token', { ...post({ timeZone }), token }),
   revokeAgentToken: (token: string) => call<{ ok: true }>('/v1/agent-token', { method: 'DELETE', token }),
+  agentPerms: (token: string) => call<{ permissions: AgentPerms }>('/v1/agent-permissions', { token }),
+  setAgentPerms: (token: string, permissions: Partial<AgentPerms>) =>
+    call<{ permissions: AgentPerms }>('/v1/agent-permissions', { method: 'PATCH', body: JSON.stringify({ permissions }), token }),
   sessions: (token: string) => call<SessionsResult>('/v1/sessions', { token }),
   signOutDevice: (token: string, id: string) => call<{ ok: true }>(`/v1/sessions/${encodeURIComponent(id)}`, { method: 'DELETE', token }),
   signOutOthers: (token: string) => call<{ ok: true; signedOut: number }>('/v1/sessions?others=1', { method: 'DELETE', token }),

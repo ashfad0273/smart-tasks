@@ -1,4 +1,4 @@
-import { parseOps, type SyncOp } from './model';
+import { parseOps, type AgentPerm, type AgentPerms, type SyncOp } from './model';
 import type { UserHub } from './hub';
 
 /**
@@ -18,6 +18,8 @@ interface Ctx {
   name: string;
   /** IANA zone of the browser that created the token, e.g. "Asia/Dhaka". */
   tz: string;
+  /** What the user lets agents do (Settings → AI agent → Permissions). */
+  perms: AgentPerms;
 }
 
 interface RpcMsg {
@@ -99,6 +101,38 @@ async function push(ctx: Ctx, ops: unknown[]): Promise<void> {
   await ctx.hub.push(clean, 'agent');
 }
 
+const PERM_LABEL: Record<AgentPerm, string> = {
+  add: 'adding tasks',
+  edit: 'editing tasks',
+  complete: 'marking tasks done',
+  archive: 'archiving',
+  delete: 'deleting',
+  categories: 'managing categories',
+  notify: 'sending notifications',
+};
+
+function need(ctx: Ctx, ...perms: AgentPerm[]): void {
+  const off = perms.filter(p => !ctx.perms[p]);
+  if (off.length) {
+    throw new ToolError(
+      `${ctx.name} has turned off ${off.map(p => PERM_LABEL[p]).join(' and ')} for AI agents. ` +
+        'Ask them to do it, or to allow it in Smart Tasks → Settings → AI agent → Permissions.',
+    );
+  }
+}
+
+const isArchived = (r: Rec) => r.archivedAt != null;
+/** Archived itself, or sitting in an archived category. */
+const taskArchived = (t: Rec, archivedCats: Set<string>) => isArchived(t) || (!!t.categoryId && archivedCats.has(t.categoryId as string));
+
+async function findCategory(ctx: Ctx, name: unknown): Promise<Rec> {
+  const n = str(name, 'category', true)!;
+  const cats = await list(ctx, 'category');
+  const hit = cats.find(c => c.id === n || String(c.name).toLowerCase() === n.toLowerCase());
+  if (!hit) throw new ToolError(`No category named "${n}". Existing: ${cats.map(c => c.name).join(', ') || 'none'}.`);
+  return hit;
+}
+
 async function findTask(ctx: Ctx, id: unknown): Promise<Rec> {
   const key = str(id, 'id', true)!;
   const tasks = await list(ctx, 'task');
@@ -115,13 +149,14 @@ async function categoryId(ctx: Ctx, name: unknown, create: boolean): Promise<str
   const hit = cats.find(c => String(c.name).toLowerCase() === n.toLowerCase());
   if (hit) return hit.id;
   if (!create) throw new ToolError(`No category named "${n}". Existing: ${cats.map(c => c.name).join(', ') || 'none'}.`);
+  need(ctx, 'categories');
   const id = crypto.randomUUID();
   const now = Date.now();
   await push(ctx, [{ kind: 'category', id, op: 'upsert', data: { name: n, color: CATEGORY_COLORS[cats.length % CATEGORY_COLORS.length], order: cats.length, createdAt: now } }]);
   return id;
 }
 
-function view(t: Rec, cats: Map<string, string>, tz: string) {
+function view(t: Rec, cats: Map<string, string>, tz: string, archived = false) {
   const subs = (t.subtasks as Array<{ title: string; done: boolean }>) ?? [];
   return {
     id: t.id,
@@ -135,6 +170,7 @@ function view(t: Rec, cats: Map<string, string>, tz: string) {
     ...(t.url ? { url: t.url } : {}),
     added: typeof t.createdAt === 'number' ? fmtLocal(t.createdAt, tz) : null,
     ...(typeof t.completedAt === 'number' ? { completed: fmtLocal(t.completedAt, tz) } : {}),
+    ...(archived ? { archived: true } : {}),
     ...(subs.length ? { subtasks: subs.map(s => `${s.done ? '[x]' : '[ ]'} ${s.title}`) } : {}),
   };
 }
@@ -159,6 +195,7 @@ const TOOLS = [
         category: { type: 'string', description: 'Only tasks in this category (by name).' },
         search: { type: 'string', description: 'Case-insensitive text to find in titles and notes.' },
         due: { type: 'string', enum: ['overdue', 'today', 'tomorrow', 'week', 'none'], description: 'Filter by due date.' },
+        archived: { type: 'string', enum: ['exclude', 'only', 'include'], description: 'Archived tasks (and tasks in archived categories). Default "exclude".' },
         limit: { type: 'number', description: 'Max tasks to return (default 50, max 200).' },
       },
     },
@@ -212,14 +249,38 @@ const TOOLS = [
   {
     name: 'delete_task',
     title: 'Delete a task',
-    description: 'Permanently delete a task. Only do this when the user clearly asked to delete or remove it.',
+    description: 'Permanently delete a task. Only do this when the user clearly asked to delete it; to just get it out of the way, use archive.',
     inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+    annotations: { destructiveHint: true },
+  },
+  {
+    name: 'archive',
+    title: 'Archive or restore',
+    description:
+      'Archive a task or a category (hides it from the list without deleting it; archiving a category hides its tasks too). With restore=true, bring it back. Prefer this over deleting when the user wants something out of the way.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: ['task', 'category'], description: 'Default "task".' },
+        id: { type: 'string', description: 'Task id from list_tasks, or the category name.' },
+        restore: { type: 'boolean', description: 'true to un-archive. Default false.' },
+      },
+      required: ['id'],
+    },
+    annotations: { idempotentHint: true },
+  },
+  {
+    name: 'delete_category',
+    title: 'Delete a category',
+    description:
+      'Permanently delete a category by name. Its tasks are kept and become uncategorized. Only do this when the user clearly asked; to just hide it, use archive.',
+    inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
     annotations: { destructiveHint: true },
   },
   {
     name: 'list_categories',
     title: 'List categories',
-    description: 'List categories with how many pending tasks each has.',
+    description: 'List categories with how many pending tasks each has, and whether each is archived.',
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true },
   },
@@ -227,12 +288,12 @@ const TOOLS = [
     name: 'list_activity',
     title: 'Task history',
     description:
-      'Recent history, newest first: tasks added, completed, reopened and deleted, and notifications sent. Each event says whether the user ("me") or an agent did it, and when.',
+      'Recent history, newest first: tasks added, completed, reopened, archived, restored and deleted, category changes, and notifications sent. Each event says whether the user ("me") or an agent did it, and when.',
     inputSchema: {
       type: 'object',
       properties: {
         limit: { type: 'number', description: 'How many events (default 30, max 100).' },
-        type: { type: 'string', enum: ['added', 'completed', 'reopened', 'deleted', 'notice'], description: 'Only this kind of event.' },
+        type: { type: 'string', enum: ['added', 'completed', 'reopened', 'deleted', 'archived', 'restored', 'notice'], description: 'Only this kind of event.' },
       },
     },
     annotations: { readOnlyHint: true },
@@ -277,7 +338,11 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
       const status = (a.status as string) ?? 'pending';
       const limit = Math.min(200, Math.max(1, Number(a.limit) || 50));
       const cats = await catMap(ctx);
+      const archCats = new Set((await list(ctx, 'category')).filter(isArchived).map(c => c.id));
+      const arch = (a.archived as string) ?? 'exclude';
       let tasks = await list(ctx, 'task');
+      if (arch === 'exclude') tasks = tasks.filter(t => !taskArchived(t, archCats));
+      else if (arch === 'only') tasks = tasks.filter(t => taskArchived(t, archCats));
       if (status === 'pending') tasks = tasks.filter(t => t.completedAt == null);
       else if (status === 'completed') tasks = tasks.filter(t => t.completedAt != null);
       if (a.category != null) {
@@ -310,11 +375,12 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
         now: fmtLocal(now, ctx.tz),
         timeZone: ctx.tz,
         total: tasks.length,
-        tasks: tasks.slice(0, limit).map(t => view(t, cats, ctx.tz)),
+        tasks: tasks.slice(0, limit).map(t => view(t, cats, ctx.tz, taskArchived(t, archCats))),
       };
     }
 
     case 'add_task': {
+      need(ctx, 'add');
       const title = str(a.title, 'title', true)!;
       const data: Record<string, unknown> = { title, order: now, createdAt: now, updatedAt: now };
       if (a.notes != null) data.notes = str(a.notes, 'notes');
@@ -333,6 +399,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
     }
 
     case 'update_task': {
+      need(ctx, 'edit');
       const t = await findTask(ctx, a.id);
       const data: Record<string, unknown> = { updatedAt: now };
       if (a.title !== undefined) data.title = str(a.title, 'title', true);
@@ -347,6 +414,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
     }
 
     case 'complete_task': {
+      need(ctx, 'complete');
       const t = await findTask(ctx, a.id);
       const done = a.done !== false;
       await push(ctx, [{ kind: 'task', id: t.id, op: 'upsert', data: { completedAt: done ? now : null, updatedAt: now } }]);
@@ -354,6 +422,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
     }
 
     case 'delete_task': {
+      need(ctx, 'delete');
       const t = await findTask(ctx, a.id);
       await push(ctx, [{ kind: 'task', id: t.id, op: 'delete' }]);
       return { deleted: { id: t.id, title: t.title } };
@@ -364,8 +433,34 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
       return {
         categories: cats
           .sort((x, y) => (x.order as number) - (y.order as number))
-          .map(c => ({ name: c.name, color: c.color, pending: tasks.filter(t => t.categoryId === c.id && t.completedAt == null).length })),
+          .map(c => ({
+            name: c.name,
+            color: c.color,
+            pending: tasks.filter(t => t.categoryId === c.id && t.completedAt == null && !isArchived(t)).length,
+            ...(isArchived(c) ? { archived: true } : {}),
+          })),
       };
+    }
+
+    case 'archive': {
+      need(ctx, 'archive');
+      const restore = a.restore === true;
+      const archivedAt = restore ? null : now;
+      if ((a.kind ?? 'task') === 'category') {
+        const c = await findCategory(ctx, a.id);
+        await push(ctx, [{ kind: 'category', id: c.id, op: 'upsert', data: { archivedAt } }]);
+        return { category: c.name, archived: !restore };
+      }
+      const t = await findTask(ctx, a.id);
+      await push(ctx, [{ kind: 'task', id: t.id, op: 'upsert', data: { archivedAt, updatedAt: now } }]);
+      return { id: t.id, title: t.title, archived: !restore };
+    }
+
+    case 'delete_category': {
+      need(ctx, 'categories', 'delete');
+      const c = await findCategory(ctx, a.name);
+      await push(ctx, [{ kind: 'category', id: c.id, op: 'delete' }]);
+      return { deleted: c.name, note: 'Its tasks are kept and are now uncategorized.' };
     }
 
     case 'list_activity': {
@@ -375,7 +470,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
       let cursor = '';
       for (let page = 0; page < 10 && out.length < limit; page++) {
         const r = await ctx.hub.activity(cursor, 100);
-        for (const e of r.events) if (!type || e.type === type) out.push({ when: fmtLocal(e.at, ctx.tz), event: e.type, title: e.title, ...(e.detail ? { message: e.detail } : {}), by: e.by === 'agent' ? 'agent' : 'user', ...(e.taskId ? { taskId: e.taskId } : {}) });
+        for (const e of r.events) if (!type || e.type === type) out.push({ when: fmtLocal(e.at, ctx.tz), event: e.type, title: e.title, ...(e.detail === 'category' ? { kind: 'category' } : e.detail ? { message: e.detail } : {}), by: e.by === 'agent' ? 'agent' : 'user', ...(e.taskId ? { taskId: e.taskId } : {}) });
         if (!r.next) break;
         cursor = r.next;
       }
@@ -383,6 +478,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
     }
 
     case 'notify': {
+      need(ctx, 'notify');
       const title = str(a.title, 'title', true)!.slice(0, 60);
       const message = str(a.message, 'message', true)!.slice(0, 240);
       let url = str(a.url, 'url') || null;
@@ -401,6 +497,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
     }
 
     case 'create_category': {
+      need(ctx, 'categories');
       const n = str(a.name, 'name', true)!;
       const cats = await list(ctx, 'category');
       const hit = cats.find(c => String(c.name).toLowerCase() === n.toLowerCase());
@@ -412,6 +509,19 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
   }
   throw new ToolError(`Unknown tool "${name}"`);
 }
+
+/** Tools the user has turned off are left out of tools/list. */
+const TOOL_PERMS: Record<string, AgentPerm[]> = {
+  add_task: ['add'],
+  update_task: ['edit'],
+  complete_task: ['complete'],
+  delete_task: ['delete'],
+  archive: ['archive'],
+  delete_category: ['categories', 'delete'],
+  create_category: ['categories'],
+  notify: ['notify'],
+};
+const allowed = (ctx: Ctx, tool: string) => (TOOL_PERMS[tool] ?? []).every(p => ctx.perms[p]);
 
 /* ── JSON-RPC plumbing ─────────────────────────────────────────────────── */
 
@@ -433,17 +543,20 @@ async function handle(ctx: Ctx, msg: RpcMsg): Promise<object | null> {
         instructions:
           `Smart Tasks is ${ctx.name}'s to-do list (browser extension). Times are in ${ctx.tz}. ` +
           'Call list_tasks before editing so you use real ids. Only delete when explicitly asked; prefer complete_task for "done". ' +
-          'Use notify to ping the user on their desktop when they asked to be told about something.',
+          'Use notify to ping the user on their desktop when they asked to be told about something. ' +
+          'Prefer archive over delete when something just needs to be out of the way. ' +
+          `The user controls what agents may do; right now: ${Object.entries(ctx.perms).map(([k, v]) => `${k} ${v ? 'on' : 'off'}`).join(', ')}.`,
       });
     }
     case 'ping':
       return ok({});
     case 'tools/list':
-      return ok({ tools: TOOLS });
+      return ok({ tools: TOOLS.filter(t => allowed(ctx, t.name)) });
     case 'tools/call': {
       const name = String(msg.params?.name ?? '');
       const args = (msg.params?.arguments ?? {}) as Record<string, unknown>;
       if (!TOOLS.some(t => t.name === name)) return err(-32602, `Unknown tool: ${name}`);
+      // Turned-off tools still answer with a clear reason (clients may have cached the list).
       try {
         const result = await runTool(ctx, name, args);
         return ok({ content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], structuredContent: result });

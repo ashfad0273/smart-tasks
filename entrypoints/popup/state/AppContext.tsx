@@ -5,6 +5,7 @@ import { isExtension, onStorageChange, storageGet, storageSet } from '../../../l
 import { baseKey, ONBOARDED_KEY, outboxKey, REGISTRY_KEY, statusKey, TOUR_KEY } from '../../../lib/keys';
 import {
   defaultCategoryOps,
+  activeTasks,
   EMPTY_SET,
   loadRegistry,
   mutate,
@@ -19,7 +20,7 @@ import {
 import type { AccountInfo, Category, DataSet, Registry, SyncOp, SyncState, SyncStatus, Task, TaskPatch } from '../../../lib/types';
 import { cheer, descErr, friendlyAuthError, hueFromString } from '../../../lib/utils';
 
-export type Screen = 'welcome' | 'login' | 'signup' | 'reset' | 'dashboard' | 'categories' | 'settings' | 'agent' | 'devices' | 'activity';
+export type Screen = 'welcome' | 'login' | 'signup' | 'reset' | 'dashboard' | 'categories' | 'settings' | 'agent' | 'devices' | 'activity' | 'archive';
 export type Tab = 'all' | 'pending' | 'completed';
 export type ToastKind = 'info' | 'error' | 'success';
 export interface Toast {
@@ -75,8 +76,15 @@ interface AppCtx {
   exportData(): Promise<void>;
   syncNow(): void;
 
+  /** Active tasks: not archived and not in an archived category. */
   tasks: Task[];
+  /** Every task, archived ones included. */
+  allTasks: Task[];
+  /** Archived tasks, plus tasks hidden because their category is archived. */
+  archivedTasks: Task[];
+  /** Active categories. */
   categories: Category[];
+  archivedCategories: Category[];
   sync: SyncState;
   lastSyncAt: number | null;
   filter: string;
@@ -97,6 +105,8 @@ interface AppCtx {
   createCategory(input: { name: string; color: string }): Promise<string | null>;
   updateCategory(id: string, patch: { name?: string; color?: string }): Promise<void>;
   deleteCategory(id: string): Promise<void>;
+  archiveTask(id: string, archived?: boolean): Promise<void>;
+  archiveCategory(id: string, archived?: boolean): Promise<void>;
 
   /** Bumped every time a task gets completed — drives the confetti. */
   celebrate: number;
@@ -577,10 +587,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const clearCompleted = useCallback(async () => {
-    const done = Object.values(data.tasks).filter(t => t.completedAt);
+    const done = activeTasks(data).filter(t => t.completedAt);
     await write(done.map(t => ({ kind: 'task' as const, id: t.id, op: 'delete' as const })));
     showToast(`Cleared ${done.length} completed task${done.length === 1 ? '' : 's'}`, 'success');
-  }, [data.tasks, showToast, write]);
+  }, [data, showToast, write]);
+
+  const archiveTask = useCallback<AppCtx['archiveTask']>(
+    async (id, archived = true) => {
+      const set = (on: boolean) => write([{ kind: 'task', id, op: 'upsert', data: { archivedAt: on ? Date.now() : null, updatedAt: Date.now() } }]);
+      await set(archived);
+      if (archived) setEditTaskId(null);
+      showToast(archived ? 'Task archived' : 'Task restored', archived ? 'info' : 'success', { label: 'Undo', run: () => void set(!archived) });
+    },
+    [showToast, write],
+  );
+
+  const archiveCategory = useCallback<AppCtx['archiveCategory']>(
+    async (id, archived = true) => {
+      const set = (on: boolean) => write([{ kind: 'category', id, op: 'upsert', data: { archivedAt: on ? Date.now() : null } }]);
+      await set(archived);
+      if (archived && filter === id) setFilter('all');
+      showToast(archived ? 'Category archived with its tasks' : 'Category restored', archived ? 'info' : 'success', {
+        label: 'Undo',
+        run: () => void set(!archived),
+      });
+    },
+    [filter, showToast, write],
+  );
 
   const createCategory = useCallback<AppCtx['createCategory']>(
     async input => {
@@ -610,11 +643,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /* ── derived ──────────────────────────────────────────────────────── */
 
-  const tasks = useMemo(() => Object.values(data.tasks).sort((a, b) => b.order - a.order), [data.tasks]);
-  const categories = useMemo(
+  const allTasks = useMemo(() => Object.values(data.tasks).sort((a, b) => b.order - a.order), [data.tasks]);
+  const isArchivedTask = useCallback(
+    (t: Task) => !!t.archivedAt || !!(t.categoryId && data.categories[t.categoryId]?.archivedAt),
+    [data.categories],
+  );
+  const tasks = useMemo(() => allTasks.filter(t => !isArchivedTask(t)), [allTasks, isArchivedTask]);
+  const archivedTasks = useMemo(
+    () => allTasks.filter(isArchivedTask).sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0)),
+    [allTasks, isArchivedTask],
+  );
+  const sortedCategories = useMemo(
     () => Object.values(data.categories).sort((a, b) => a.order - b.order || a.createdAt - b.createdAt),
     [data.categories],
   );
+  const categories = useMemo(() => sortedCategories.filter(c => !c.archivedAt), [sortedCategories]);
+  const archivedCategories = useMemo(() => sortedCategories.filter(c => !!c.archivedAt), [sortedCategories]);
   const categoryById = useCallback((id: string | null) => (id ? (data.categories[id] ?? null) : null), [data.categories]);
 
   const inFilter = useMemo(() => {
@@ -726,7 +770,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     exportData,
     syncNow,
     tasks,
+    allTasks,
+    archivedTasks,
     categories,
+    archivedCategories,
     sync: syncState,
     lastSyncAt: status.lastSyncAt,
     filter,
@@ -747,6 +794,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     createCategory,
     updateCategory,
     deleteCategory,
+    archiveTask,
+    archiveCategory,
     celebrate,
     editTaskId,
     openEdit,
