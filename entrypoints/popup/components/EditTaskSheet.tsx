@@ -22,6 +22,31 @@ import Sheet from './Sheet';
 import { AiPanel, canSendToAi } from './AiRequest';
 import DueEditor from './DueEditor';
 
+/** Small donut showing how many subtasks are done. */
+function ProgressRing({ done, total }: { done: number; total: number }) {
+  const r = 7;
+  const c = 2 * Math.PI * r;
+  const pct = total ? done / total : 0;
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" className="shrink-0 -rotate-90" aria-hidden>
+      <circle cx="9" cy="9" r={r} fill="none" stroke="currentColor" strokeWidth="2.5" className="text-white/[.07]" />
+      <circle
+        cx="9"
+        cy="9"
+        r={r}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeDasharray={c}
+        strokeDashoffset={c * (1 - pct)}
+        className="text-acc transition-[stroke-dashoffset] duration-500"
+        opacity={pct ? 1 : 0}
+      />
+    </svg>
+  );
+}
+
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mt-4">
@@ -407,19 +432,30 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
           {dueAt && <p className="mt-2 text-[11px] text-mut">Reminder at this time.</p>}
         </Section>
 
-        <Section label={`Subtasks${subtasks.length ? ` · ${doneSubs}/${subtasks.length}` : ''}`}>
-          {subtasks.length > 0 && (
-            <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-line">
-              <div className="grad-acc h-full rounded-full transition-[width] duration-500" style={{ width: `${(doneSubs / subtasks.length) * 100}%` }} />
-            </div>
-          )}
-          <div ref={listRef} className="space-y-0.5">
+        <div className="mt-4">
+          <span className="mb-1.5 block text-xs font-semibold text-mut">Subtasks</span>
+          <div className="overflow-hidden rounded-xl border border-white/[.06] bg-black/20">
+            {subtasks.length > 0 && (
+              <>
+                <div className="flex items-center gap-2.5 px-3 pb-2 pt-2.5">
+                  <ProgressRing done={doneSubs} total={subtasks.length} />
+                  <span className={cx('flex-1 text-[11.5px] font-semibold', doneSubs === subtasks.length ? 'text-acc' : 'text-txt/80')}>
+                    {doneSubs === subtasks.length ? 'All done' : `${doneSubs} of ${subtasks.length} done`}
+                  </span>
+                  <span className="text-[11px] tabular-nums text-mut">{Math.round((doneSubs / subtasks.length) * 100)}%</span>
+                </div>
+                <div className="h-[2px] bg-white/[.04]">
+                  <div className="grad-acc h-full transition-[width] duration-500" style={{ width: `${(doneSubs / subtasks.length) * 100}%` }} />
+                </div>
+              </>
+            )}
+            <div ref={listRef} className="divide-y divide-white/[.04]">
             {subtasks.map((s, i) => (
               <div
                 key={s.id}
                 data-sub-row
                 className={cx(
-                  'group/sub flex items-center gap-2 rounded-xl px-1 py-1.5',
+                  'group/sub flex items-start gap-2 px-2 py-2 transition-colors hover:bg-white/[.025]',
                   drag?.from === i && 'opacity-40',
                   drag && target === i && drag.from !== i && 'ring-1 ring-acc/60',
                 )}
@@ -428,7 +464,7 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
                   role="button"
                   tabIndex={0}
                   aria-label="Reorder (drag, or use arrow keys)"
-                  className="cursor-grab touch-none text-mut/40 hover:text-mut"
+                  className="mt-px cursor-grab touch-none text-mut/40 opacity-0 transition-opacity hover:text-mut focus:opacity-100 group-hover/sub:opacity-100"
                   onPointerDown={e => {
                     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                     setDrag({ from: i, y: e.clientY });
@@ -442,13 +478,13 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
                 >
                   <GripVertical size={14} />
                 </span>
-                <button onClick={() => toggleSub(s.id)} aria-label={s.done ? 'Mark subtask not done' : 'Complete subtask'} className="press shrink-0">
+                <button onClick={() => toggleSub(s.id)} aria-label={s.done ? 'Mark subtask not done' : 'Complete subtask'} className="press mt-px shrink-0">
                   {s.done ? (
                     <span className="anim-check grad-acc grid h-4 w-4 place-items-center rounded-full text-white">
                       <Check size={10} strokeWidth={3.5} />
                     </span>
                   ) : (
-                    <span className="block h-4 w-4 rounded-full border-2 border-mut/40 hover:border-acc" />
+                    <span className="block h-4 w-4 rounded-full border-[1.5px] border-mut/50 transition-colors hover:border-acc hover:bg-acc/10" />
                   )}
                 </button>
                 {editingSub === s.id ? (
@@ -464,7 +500,7 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
                         setEditingSub(null);
                       }
                     }}
-                    className="min-w-0 flex-1 rounded-lg border border-acc/50 bg-surface2 px-2 py-1 text-xs outline-none"
+                    className="-my-1 min-w-0 flex-1 rounded-lg border border-acc/50 bg-surface2 px-2 py-1 text-[12.5px] outline-none"
                   />
                 ) : (
                   <button
@@ -474,43 +510,45 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
                       setEditSubText(s.title);
                     }}
                   >
-                    <span className={cx('block truncate text-xs font-semibold', s.done ? 'text-mut line-through' : 'text-txt')}>{s.title}</span>
+                    <span title={s.title} className={cx('line-clamp-2 break-words text-[12.5px] leading-snug', s.done ? 'text-mut line-through decoration-mut/50' : 'text-txt/90')}>{s.title}</span>
                   </button>
                 )}
                 <button
                   onClick={() => removeSub(s.id)}
                   aria-label="Remove subtask"
-                  className="shrink-0 rounded p-0.5 text-mut/40 opacity-0 transition-opacity hover:text-danger focus:opacity-100 group-hover/sub:opacity-100"
+                  className="mt-px shrink-0 rounded p-0.5 text-mut/40 opacity-0 transition-opacity hover:text-danger focus:opacity-100 group-hover/sub:opacity-100"
                 >
                   <X size={12} />
                 </button>
               </div>
             ))}
+            </div>
+            <div className={cx('flex items-center gap-2 px-2 py-1.5', subtasks.length > 0 && 'border-t border-white/[.04]')}>
+              <button
+                onClick={addSub}
+                aria-label="Add subtask"
+                disabled={!newSub.trim()}
+                className="press grid h-5 w-5 shrink-0 place-items-center rounded-full text-mut enabled:text-acc enabled:hover:bg-acc/10"
+              >
+                <Plus size={14} />
+              </button>
+              <input
+                value={newSub}
+                onChange={e => setNewSub(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addSub();
+                  }
+                }}
+                placeholder={subtasks.length ? 'Add a subtask' : 'Break it down into steps'}
+                aria-label="New subtask"
+                className="min-w-0 flex-1 bg-transparent py-1 text-[12.5px] outline-none placeholder:text-mut/55"
+              />
+              {newSub.trim() && <kbd className="rounded border border-white/10 bg-black/20 px-1.5 text-[10px] font-semibold text-mut">Enter</kbd>}
+            </div>
           </div>
-          <div className="mt-1.5 flex items-center gap-2">
-            <input
-              value={newSub}
-              onChange={e => setNewSub(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  addSub();
-                }
-              }}
-              placeholder="Break it down… (Enter to add)"
-              aria-label="New subtask"
-              className="min-w-0 flex-1 rounded-xl border border-dashed border-line bg-transparent px-2.5 py-1.5 text-xs outline-none placeholder:text-mut/50 focus:border-acc/50"
-            />
-            <button
-              onClick={addSub}
-              aria-label="Add subtask"
-              disabled={!newSub.trim()}
-              className="press grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-line text-mut hover:border-acc/40 hover:text-acc disabled:opacity-40"
-            >
-              <Plus size={13} />
-            </button>
-          </div>
-        </Section>
+        </div>
 
         {docked && <TaskHistory task={task} />}
 
