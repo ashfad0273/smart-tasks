@@ -565,31 +565,40 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
           </div>
         )}
 
-        <div className="sticky bottom-0 -mx-4 mt-4 flex gap-2 border-t border-white/[.05] bg-surface px-4 pb-4 pt-3">
-          <button
-            onClick={() => void remove()}
-            className="press inline-flex shrink-0 items-center gap-1.5 rounded-full border border-danger/30 px-3.5 py-2.5 text-xs font-semibold text-danger hover:bg-danger/10"
-          >
-            <Trash2 size={13} /> Delete
-          </button>
-          <button
-            onClick={() => void app.archiveTask(task.id, !task.archivedAt)}
-            title={task.archivedAt ? 'Bring back to your list' : 'Hide from your list without deleting'}
-            className="press inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3.5 py-2.5 text-xs font-semibold text-mut hover:border-acc/40 hover:text-acc"
-          >
-            {task.archivedAt ? <ArchiveRestore size={13} /> : <Archive size={13} />} {task.archivedAt ? 'Restore' : 'Archive'}
-          </button>
-          {docked && (
+        <div className="sticky bottom-0 -mx-4 mt-4 flex items-center gap-2 border-t border-white/[.05] bg-surface px-4 pb-4 pt-3">
+          {/* Secondary actions: one matching group of icon buttons. */}
+          <div className="flex h-9 shrink-0 items-stretch overflow-hidden rounded-xl border border-white/[.08] bg-white/[.02]">
             <button
-              onClick={() => void flush().then(() => app.duplicateTask(task.id))}
-              title="Make a copy with the same details"
-              aria-label="Duplicate"
-              className="press inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3 py-2.5 text-xs font-semibold text-mut hover:border-acc/40 hover:text-acc"
+              onClick={() => void remove()}
+              title="Delete task"
+              aria-label="Delete task"
+              className="press grid w-10 place-items-center text-mut transition-colors hover:bg-danger/10 hover:text-danger"
             >
-              <Copy size={13} />
+              <Trash2 size={15} />
             </button>
-          )}
-          <button onClick={() => void requestClose()} className="press btn-acc flex-1 rounded-full py-2.5 text-sm font-semibold">
+            <button
+              onClick={() => void app.archiveTask(task.id, !task.archivedAt)}
+              title={task.archivedAt ? 'Restore: bring back to your list' : 'Archive: hide from your list without deleting'}
+              aria-label={task.archivedAt ? 'Restore task' : 'Archive task'}
+              className="press grid w-10 place-items-center border-l border-white/[.06] text-mut transition-colors hover:bg-white/[.05] hover:text-txt"
+            >
+              {task.archivedAt ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+            </button>
+            {docked && (
+              <button
+                onClick={() => void flush().then(() => app.duplicateTask(task.id))}
+                title="Duplicate: make a copy with the same details"
+                aria-label="Duplicate task"
+                className="press grid w-10 place-items-center border-l border-white/[.06] text-mut transition-colors hover:bg-white/[.05] hover:text-txt"
+              >
+                <Copy size={15} />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => void requestClose()}
+            className="press h-9 flex-1 rounded-xl bg-acc text-[13px] font-bold text-[#06201d] transition-[filter] hover:brightness-110"
+          >
             Done
           </button>
         </div>
