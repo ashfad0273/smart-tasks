@@ -171,7 +171,7 @@ function view(t: Rec, cats: Map<string, string>, tz: string, archived = false) {
     added: typeof t.createdAt === 'number' ? fmtLocal(t.createdAt, tz) : null,
     ...(typeof t.completedAt === 'number' ? { completed: fmtLocal(t.completedAt, tz) } : {}),
     ...(archived ? { archived: true } : {}),
-    ...(subs.length ? { subtasks: subs.map(s => `${s.done ? '[x]' : '[ ]'} ${s.title}`) } : {}),
+    ...(subs.length ? { subtasks: subs.map((s, i) => `${i + 1}. ${s.done ? '[x]' : '[ ]'} ${s.title}`), subtasksDone: `${subs.filter(s => s.done).length}/${subs.length}` } : {}),
   };
 }
 
@@ -245,6 +245,39 @@ const TOOLS = [
       required: ['id'],
     },
     annotations: { idempotentHint: true },
+  },
+  {
+    name: 'update_subtasks',
+    title: 'Change subtasks',
+    description:
+      "Change a task's checklist (subtasks) in one call: add, tick off (cross out), untick, rename, move or delete items, or clear the finished ones. " +
+      'Point at a subtask by its number in list_tasks (1 = first), or by its text (exact, or a unique part of it). Actions run in order, and numbers refer to the list as it is when that action runs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Task id from list_tasks.' },
+        actions: {
+          type: 'array',
+          description: 'What to do, in order.',
+          items: {
+            type: 'object',
+            properties: {
+              op: {
+                type: 'string',
+                enum: ['add', 'done', 'undone', 'rename', 'delete', 'move', 'done_all', 'undone_all', 'clear_done', 'delete_all'],
+                description:
+                  'add: new item (title, optional position). done / undone: tick or untick one. rename: new title. delete: remove one. move: to position. done_all / undone_all: every item. clear_done: delete ticked items. delete_all: empty the checklist.',
+              },
+              subtask: { type: ['string', 'number'], description: 'Which subtask: its number (1-based) or its text. Not needed for add or the *_all / clear_done ops.' },
+              title: { type: 'string', description: 'For add and rename.' },
+              position: { type: 'number', description: 'For add (where to insert) and move (where to put it); 1 = top. Add defaults to the end.' },
+            },
+            required: ['op'],
+          },
+        },
+      },
+      required: ['id', 'actions'],
+    },
   },
   {
     name: 'delete_task',
@@ -413,6 +446,102 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
       return { updated: view(after, await catMap(ctx), ctx.tz) };
     }
 
+    case 'update_subtasks': {
+      const t = await findTask(ctx, a.id);
+      if (!Array.isArray(a.actions) || a.actions.length === 0) throw new ToolError('actions must be a non-empty array');
+      if (a.actions.length > 100) throw new ToolError('At most 100 actions per call');
+      type Sub = { id: string; title: string; done: boolean };
+      let subs: Sub[] = ((t.subtasks as Sub[]) ?? []).map(x => ({ ...x }));
+      const pick = (ref: unknown): number => {
+        if (ref === undefined || ref === null || ref === '') throw new ToolError('Say which subtask (its number or text).');
+        const n = typeof ref === 'number' ? ref : /^\d+$/.test(String(ref).trim()) ? Number(String(ref).trim()) : NaN;
+        if (!Number.isNaN(n)) {
+          if (n < 1 || n > subs.length) throw new ToolError(`There is no subtask ${n}; this task has ${subs.length}.`);
+          return n - 1;
+        }
+        const q = String(ref).trim().toLowerCase();
+        const exact = subs.findIndex(x => x.id === ref || x.title.toLowerCase() === q);
+        if (exact >= 0) return exact;
+        const part = subs.map((x, i) => (x.title.toLowerCase().includes(q) ? i : -1)).filter(i => i >= 0);
+        if (part.length === 1) return part[0];
+        if (part.length > 1) throw new ToolError(`"${ref}" matches ${part.length} subtasks; use its number instead.`);
+        throw new ToolError(`No subtask matching "${ref}". Subtasks: ${subs.map((x, i) => `${i + 1}. ${x.title}`).join('; ') || 'none'}.`);
+      };
+      const pos = (v: unknown, len: number) => Math.min(len, Math.max(0, (Number(v) || len + 1) - 1));
+      const title = (v: unknown) => {
+        const s = str(v, 'title', true)!.slice(0, 300);
+        return s;
+      };
+      const done: string[] = [];
+      for (const raw of a.actions as Array<Record<string, unknown>>) {
+        const op = String(raw?.op ?? '');
+        switch (op) {
+          case 'add': {
+            need(ctx, 'edit');
+            if (subs.length >= 100) throw new ToolError('A task can have at most 100 subtasks.');
+            const item = { id: crypto.randomUUID(), title: title(raw.title), done: false };
+            subs.splice(raw.position === undefined ? subs.length : pos(raw.position, subs.length), 0, item);
+            done.push(`added "${item.title}"`);
+            break;
+          }
+          case 'done':
+          case 'undone': {
+            need(ctx, 'complete');
+            const i = pick(raw.subtask);
+            subs[i].done = op === 'done';
+            done.push(`${op === 'done' ? 'ticked' : 'unticked'} "${subs[i].title}"`);
+            break;
+          }
+          case 'rename': {
+            need(ctx, 'edit');
+            const i = pick(raw.subtask);
+            const before = subs[i].title;
+            subs[i].title = title(raw.title);
+            done.push(`renamed "${before}" to "${subs[i].title}"`);
+            break;
+          }
+          case 'delete': {
+            need(ctx, 'edit');
+            const i = pick(raw.subtask);
+            done.push(`deleted "${subs[i].title}"`);
+            subs.splice(i, 1);
+            break;
+          }
+          case 'move': {
+            need(ctx, 'edit');
+            const i = pick(raw.subtask);
+            const [item] = subs.splice(i, 1);
+            subs.splice(pos(raw.position, subs.length), 0, item);
+            done.push(`moved "${item.title}" to ${subs.indexOf(item) + 1}`);
+            break;
+          }
+          case 'done_all':
+          case 'undone_all':
+            need(ctx, 'complete');
+            subs = subs.map(x => ({ ...x, done: op === 'done_all' }));
+            done.push(op === 'done_all' ? 'ticked all' : 'unticked all');
+            break;
+          case 'clear_done': {
+            need(ctx, 'edit');
+            const n = subs.filter(x => x.done).length;
+            subs = subs.filter(x => !x.done);
+            done.push(`cleared ${n} finished`);
+            break;
+          }
+          case 'delete_all':
+            need(ctx, 'edit');
+            done.push(`deleted all ${subs.length}`);
+            subs = [];
+            break;
+          default:
+            throw new ToolError(`Unknown op "${op}". Use add, done, undone, rename, delete, move, done_all, undone_all, clear_done or delete_all.`);
+        }
+      }
+      await push(ctx, [{ kind: 'task', id: t.id, op: 'upsert', data: { subtasks: subs, updatedAt: now } }]);
+      const after = (await list(ctx, 'task')).find(x => x.id === t.id)!;
+      return { changes: done, task: view(after, await catMap(ctx), ctx.tz) };
+    }
+
     case 'complete_task': {
       need(ctx, 'complete');
       const t = await findTask(ctx, a.id);
@@ -514,6 +643,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
 const TOOL_PERMS: Record<string, AgentPerm[]> = {
   add_task: ['add'],
   update_task: ['edit'],
+  update_subtasks: ['edit'],
   complete_task: ['complete'],
   delete_task: ['delete'],
   archive: ['archive'],
