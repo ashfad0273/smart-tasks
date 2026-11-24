@@ -189,7 +189,7 @@ const TOOLS = [
     name: 'list_requests',
     title: 'Tasks the user approved for AI',
     description:
-      'Tasks the user pressed "OK, send to AI" on, waiting for an agent to do them. Requests from tasks you (this key and session) created are shown first; ' +
+      'Tasks the user sent to AI, waiting for an agent to do them. Each has userAnswer: either a plain OK or the user\'s own written answer/instructions for that task (follow it). Requests from tasks you (this key and session) created are shown first; ' +
       'others become visible to any agent after 10 minutes. Call this when checking in (e.g. on a /loop), then claim_request before starting.',
     inputSchema: {
       type: 'object',
@@ -410,7 +410,9 @@ function dayStart(ms: number, tz: string): number {
 const FALLBACK_MS = 10 * 60_000;
 /** A claim with no finish after this long is treated as abandoned. */
 const CLAIM_STALE_MS = 2 * 60 * 60_000;
-type Req = { status: 'approved' | 'claimed' | 'done'; at: number; by: string | null; session: string | null; note: string | null };
+type Req = { status: 'approved' | 'claimed' | 'done'; at: number; by: string | null; session: string | null; note: string | null; reply?: string | null };
+/** What the user said when sending the task: their own answer, or a plain OK. */
+const answerOf = (r: Req) => r.reply ?? 'OK (go ahead as planned)';
 const sessionArg = (a: Record<string, unknown>) => (typeof a.session === 'string' && a.session.trim() ? a.session.trim().slice(0, 120) : null);
 
 async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Promise<unknown> {
@@ -434,7 +436,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
           return !a.mine_only && now - r.at > FALLBACK_MS;
         })
         .sort((x, y) => Number(mine(y)) - Number(mine(x)) || (x.aiRequest as Req).at - (y.aiRequest as Req).at)
-        .map(t => ({ ...view(t, cats, ctx.tz), approved: fmtLocal((t.aiRequest as Req).at, ctx.tz), yours: mine(t) }));
+        .map(t => ({ ...view(t, cats, ctx.tz), approved: fmtLocal((t.aiRequest as Req).at, ctx.tz), userAnswer: answerOf(t.aiRequest as Req), yours: mine(t) }));
       return { total: out.length, requests: out, hint: out.length ? 'claim_request before starting each one.' : 'Nothing approved right now.' };
     }
 
@@ -444,9 +446,9 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
       const r = t.aiRequest as Req | null | undefined;
       if (!r || r.status === 'done') throw new ToolError('That task is not waiting for an agent.');
       if (r.status === 'claimed' && now - r.at <= CLAIM_STALE_MS && r.by !== ctx.agent) throw new ToolError(`${r.by ?? 'Another agent'} is already working on it.`);
-      const aiRequest = { status: 'claimed', at: now, by: ctx.agent, session: sessionArg(a), note: null };
+      const aiRequest = { status: 'claimed', at: now, by: ctx.agent, session: sessionArg(a), note: null, reply: r.reply ?? null };
       await push(ctx, [{ kind: 'task', id: t.id, op: 'upsert', data: { aiRequest, updatedAt: now } }]);
-      return { claimed: view(t, await catMap(ctx), ctx.tz), next: 'Do the task, then call finish_request with a short result.' };
+      return { claimed: view(t, await catMap(ctx), ctx.tz), userAnswer: answerOf(r), next: 'Follow the user\'s answer for this task, then call finish_request with a short result.' };
     }
 
     case 'finish_request': {
@@ -458,7 +460,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
       const done = a.done !== false;
       if (done) need(ctx, 'complete');
       const data: Record<string, unknown> = {
-        aiRequest: { status: done ? 'done' : 'approved', at: now, by: ctx.agent, session: r.session, note: result },
+        aiRequest: { status: done ? 'done' : 'approved', at: now, by: ctx.agent, session: r.session, note: result, reply: r.reply ?? null },
         updatedAt: now,
       };
       if (done) data.completedAt = now;
@@ -779,7 +781,7 @@ async function handle(ctx: Ctx, msg: RpcMsg): Promise<object | null> {
           'Use notify to ping the user on their desktop when they asked to be told about something. ' +
           'Prefer archive over delete when something just needs to be out of the way. ' +
           'Pass your session id as `session` to add_task so tasks you create can be sent back to you. ' +
-          'The user can press "OK, send to AI" on a task: check list_requests when you start and periodically (e.g. `/loop 5m check Smart Tasks for approved tasks`), ' +
+          'The user can send a task back to AI with a plain OK or their own written answer (userAnswer, tied to that task): check list_requests when you start and periodically (e.g. `/loop 5m check Smart Tasks for approved tasks`), ' +
           'claim_request before working, and finish_request with a short result when done. ' +
           `The user controls what agents may do; right now: ${Object.entries(ctx.perms).map(([k, v]) => `${k} ${v ? 'on' : 'off'}`).join(', ')}.`,
       });

@@ -46,6 +46,8 @@ export interface AiRequest {
   session: string | null;
   /** what the agent reported when it finished */
   note: string | null;
+  /** your custom answer sent along with the OK (null = plain OK) */
+  reply?: string | null;
 }
 
 export type TaskPatch = Partial<Omit<Task, 'id' | 'createdAt'>>;

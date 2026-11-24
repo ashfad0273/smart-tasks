@@ -110,6 +110,8 @@ function cleanTask(d: Record<string, unknown>): Record<string, unknown> {
           by: o.by == null ? null : str(o.by, 60, 'aiRequest.by'),
           session: o.session == null ? null : str(o.session, 120, 'aiRequest.session'),
           note: o.note == null ? null : str(o.note, LIMITS.notes, 'aiRequest.note'),
+          // The user's own answer/instructions sent with the OK.
+          reply: o.reply == null || o.reply === '' ? null : str(o.reply, LIMITS.notes, 'aiRequest.reply'),
         };
         break;
       }
