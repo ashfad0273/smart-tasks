@@ -108,7 +108,11 @@ interface DesktopUpdate {
   date: string | null;
 }
 
-const UPDATE_EVERY_MS = 6 * 3600_000;
+/** Background check while the app stays open. Each check is one ~1 KB request for latest.json. */
+const UPDATE_EVERY_MS = 30 * 60_000;
+/** Bringing the window to the front checks too, but not more often than this. */
+const FOCUS_CHECK_GAP_MS = 10 * 60_000;
+let lastCheck = 0;
 let installing = false;
 
 async function installUpdate(version: string) {
@@ -131,6 +135,7 @@ async function installUpdate(version: string) {
 }
 
 async function checkUpdate(): Promise<void> {
+  lastCheck = Date.now();
   let u: DesktopUpdate | null;
   try {
     u = await invoke<DesktopUpdate | null>('check_update');
@@ -200,4 +205,10 @@ export function startHost() {
   });
   setTimeout(() => void checkUpdate(), 20_000);
   setInterval(() => void checkUpdate(), UPDATE_EVERY_MS);
+  // Opening the window (tray click, shortcut, Cmd+Tab) looks for a new version right away.
+  const onFront = () => {
+    if (!document.hidden && Date.now() - lastCheck > FOCUS_CHECK_GAP_MS) void checkUpdate();
+  };
+  window.addEventListener('focus', onFront);
+  document.addEventListener('visibilitychange', onFront);
 }
