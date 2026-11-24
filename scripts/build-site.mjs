@@ -104,7 +104,11 @@ const mbOf = p => (statSync(p).size / 1024 / 1024).toFixed(1);
 const signature = p => readFileSync(`${p}.sig`, 'utf8').trim();
 
 const setupName = `Smart Tasks_${version}_x64-setup.exe`;
-const setupSrc = targetDirs.map(d => join(d, 'release/bundle/nsis', setupName)).find(p => existsSync(p) && existsSync(`${p}.sig`));
+// Built on this PC (Cargo target dir), or on GitHub by .github/workflows/desktop-windows.yml
+// and fetched into desktop/release/windows with `npm run desktop:win:fetch`.
+const setupSrc = [...targetDirs.map(d => join(d, 'release/bundle/nsis', setupName)), join(root, 'desktop/release/windows', setupName)].find(
+  p => existsSync(p) && existsSync(`${p}.sig`),
+);
 if (setupSrc) {
   const exe = `smart-tasks-setup-${version}.exe`;
   mkdirSync(deskOut, { recursive: true });

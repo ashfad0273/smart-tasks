@@ -1,0 +1,76 @@
+# Builds the Windows installer (NSIS, x64) on a Windows runner, so a release
+# no longer needs the Windows PC. Download the result with
+# `npm run desktop:win:fetch`, then `npm run site:deploy` publishes it.
+#
+# Repository secrets (Settings → Secrets and variables → Actions):
+#   TAURI_SIGNING_PRIVATE_KEY           required: contents of ~/.smart-tasks/updater.key
+#                                       (signs the update so installed apps accept it)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  only if that key has a password
+# The installer itself is not code-signed yet, so SmartScreen still warns on
+# first install (see PRODUCTION.md).
+
+name: Desktop app (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+
+      - run: npm ci
+
+      - name: Signing environment
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::Add the TAURI_SIGNING_PRIVATE_KEY secret (contents of ~/.smart-tasks/updater.key)."
+            exit 1
+          fi
+          d="EOF_$(openssl rand -hex 8)"
+          { echo "TAURI_SIGNING_PRIVATE_KEY<<$d"; echo "$TAURI_SIGNING_PRIVATE_KEY"; echo "$d"; } >> "$GITHUB_ENV"
+          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: npm run desktop:build -- --bundles nsis
+
+      - name: Collect
+        shell: bash
+        run: |
+          B=desktop/src-tauri/target/release/bundle/nsis
+          mkdir -p out
+          cp "$B"/*-setup.exe "$B"/*-setup.exe.sig out/
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smart-tasks-windows
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30

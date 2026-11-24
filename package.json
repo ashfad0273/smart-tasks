@@ -18,6 +18,7 @@
     "desktop:dev": "node desktop/scripts/tauri.mjs dev",
     "desktop:build": "node desktop/scripts/tauri.mjs build",
     "desktop:mac:fetch": "node desktop/scripts/fetch-mac.mjs",
+    "desktop:win:fetch": "node desktop/scripts/fetch-win.mjs",
     "desktop:compile": "tsc --noEmit -p desktop/tsconfig.json"
   },
   "dependencies": {
