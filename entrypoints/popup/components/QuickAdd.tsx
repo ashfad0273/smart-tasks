@@ -64,7 +64,7 @@ export default function QuickAdd({ open, onClose }: { open: boolean; onClose: ()
         onSubmit={submit}
         inert={!open}
         className={cx(
-          'absolute inset-x-4 bottom-20 rounded-3xl border border-white/[.07] bg-surface p-3.5 shadow-[0_24px_60px_rgba(0,0,0,.55)] transition-[transform,opacity] duration-300 ease-[var(--ease-out)]',
+          'st-quickadd absolute inset-x-4 bottom-20 rounded-3xl border border-white/[.07] bg-surface p-3.5 shadow-[0_24px_60px_rgba(0,0,0,.55)] transition-[transform,opacity] duration-300 ease-[var(--ease-out)]',
           open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-4 opacity-0',
         )}
         style={{ transformOrigin: 'bottom right' }}

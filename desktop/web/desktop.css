@@ -29,6 +29,11 @@ html.desktop #root {
   /* left/right 0 + a fixed width + auto margins centres it at any window width.
      (The old left: 50% + margin-left: min(-280px, -50%) pulled it to the left
      edge once the window was wider than 560px.) */
+  /* New-task box: stays a compact card by the + button instead of spanning the window. */
+  html.desktop .st-quickadd {
+    left: auto;
+    width: min(420px, calc(100% - 2rem));
+  }
   html.desktop .st-sheet {
     left: 0;
     right: 0;
