@@ -311,12 +311,12 @@ export default function Dashboard() {
                 onClick={() => setSortOpen(o => !o)}
                 className={cx(
                   'press flex items-center gap-1.5 whitespace-nowrap rounded-full border hover:text-acc',
-                  wide ? 'px-3 py-1.5 text-[11.5px] font-semibold' : 'p-3',
+                  wide ? 'px-3 py-1.5 text-[11.5px] font-semibold @max-[600px]:px-2' : 'p-3',
                   app.sortBy !== 'due' ? 'border-acc/30 bg-acc/10 text-acc' : 'border-white/[.02] bg-black/15 text-mut',
                 )}
               >
                 <ArrowDownUp size={13} />
-                {wide && <span>Sort: {SORTS.find(s => s.id === app.sortBy)?.label}</span>}
+                {wide && <span className="@max-[600px]:hidden">Sort: {SORTS.find(s => s.id === app.sortBy)?.label}</span>}
               </button>
               {sortOpen && (
                 <div
@@ -777,8 +777,8 @@ function WideHeader({
 
   return (
     <>
-      <header className="flex items-center gap-3 px-6 pt-5">
-        <div className="min-w-0">
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-6 pt-5">
+        <div className="min-w-0 flex-1 basis-40">
           <h1 className="flex items-center gap-2 truncate text-[19px] font-bold tracking-tight">
             {cat && <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: cat.color }} />}
             {title}
@@ -788,13 +788,13 @@ function WideHeader({
         {streak >= 2 && (
           <span
             title={`${streak}-day streak: you finished something ${streak} days in a row`}
-            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-warn/25 bg-warn/10 px-2 py-1 text-[11px] font-semibold tabular-nums text-warn"
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-warn/25 bg-warn/10 px-2 py-1 text-[11px] font-semibold tabular-nums text-warn @max-[600px]:hidden"
           >
             <Flame size={12} /> {streak}-day streak
           </span>
         )}
         {(app.sync === 'offline' || app.sync === 'error') && <SyncBadge state={app.sync} onClick={app.syncNow} />}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2 @max-[600px]:w-full @max-[600px]:justify-between">
           <div className="flex rounded-full border border-white/[.04] bg-black/20 p-[3px]" role="tablist">
             {tabs.map(t => (
               <button

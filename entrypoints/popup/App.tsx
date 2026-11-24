@@ -56,7 +56,7 @@ function Shell() {
   return (
     <div className="st-shell flex h-full">
       <Sidebar />
-      <main className="relative min-w-0 flex-1">
+      <main className="@container relative min-w-0 flex-1 overflow-hidden">
         <div key={app.screen} className="anim-screen h-full">
           {NARROW_PAGES.has(app.screen) ? <div className="mx-auto h-full max-w-[720px]">{page}</div> : page}
         </div>
