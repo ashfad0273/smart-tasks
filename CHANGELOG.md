@@ -2,6 +2,14 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## 1.8.2 - 2026-11-25
+
+### Changed
+- **Tidier AI agents page.** In the desktop app it is one centred column (keys, connecting your AI, permissions, notifications, recent activity) instead of two uneven columns, and every card has the same kind of header.
+
+### Fixed
+- Times in Recent agent activity no longer wrap onto two lines.
+
 ## 1.8.1 - 2026-11-24
 
 ### Changed

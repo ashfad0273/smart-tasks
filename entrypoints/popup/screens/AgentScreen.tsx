@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BellRing, Bot, Check, ChevronLeft, Copy, KeyRound, Pencil, Plus, ShieldCheck, Volume2 } from 'lucide-react';
+import { Activity, BellRing, Bot, Check, ChevronLeft, Copy, KeyRound, Pencil, Plug, Plus, ShieldCheck, Volume2 } from 'lucide-react';
 import { storageGet, storageSet } from '../../../lib/ext';
 import { AGENT_CLIENT_KEY, AGENT_NOTIFY_KEY, AGENT_SOUND_KEY } from '../../../lib/keys';
 import { AGENT_CLIENTS, AGENT_GUIDE } from '../../../lib/agents';
@@ -344,8 +344,14 @@ export default function AgentScreen() {
             </section>
   );
   const connectSection = (
-            <section className="anim-card rounded-2xl border border-line bg-surface py-3.5">
-              <h3 className="px-3.5 text-[11px] font-semibold uppercase tracking-wider text-mut">Connect your AI</h3>
+            <section className="anim-card rounded-2xl border border-line bg-surface pb-3.5">
+              <div className="flex items-center gap-2.5 px-3.5 pb-1 pt-3.5">
+                <Plug size={14} className="shrink-0 text-mut" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-medium">Connect your AI</p>
+                  <p className="text-[11px] text-mut">Pick your app and paste this into its settings.</p>
+                </div>
+              </div>
               <ScrollRow className="mt-2 gap-1.5 px-3.5 py-0.5">
                 {AGENT_CLIENTS.map(c => (
                   <button
@@ -389,7 +395,10 @@ export default function AgentScreen() {
   );
   const recentSection = (
     <section className="anim-card rounded-2xl border border-line bg-surface p-3.5">
-      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-mut">Recent agent activity</h3>
+      <div className="flex items-center gap-2.5">
+        <Activity size={14} className="shrink-0 text-mut" />
+        <p className="text-[13px] font-medium">Recent agent activity</p>
+      </div>
       {recent === null ? (
         <div className="skeleton mt-2 h-16 rounded-xl" />
       ) : recent.length === 0 ? (
@@ -398,7 +407,7 @@ export default function AgentScreen() {
         <ol className="mt-2 space-y-1.5">
           {recent.map(e => (
             <li key={e.id} className="flex items-baseline gap-2 text-[11.5px]">
-              <span className="w-12 shrink-0 tabular-nums text-mut">{new Date(e.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              <span className="w-[62px] shrink-0 whitespace-nowrap tabular-nums text-mut">{new Date(e.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
               <span className="min-w-0 flex-1 truncate text-txt/85">
                 <span className="font-semibold text-pop">{e.agent || 'AI agent'}</span> {RECENT_VERB[e.type]} “{e.title}”
               </span>
@@ -419,7 +428,8 @@ export default function AgentScreen() {
         <span className="w-7" />
       </header>
 
-      <div className={cx('hide-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pb-5', wide ? 'mx-auto w-full max-w-[900px] px-7 pt-6' : 'px-5')}>
+      <div className={cx('hide-scrollbar min-h-0 flex-1 overflow-y-auto pb-5', wide ? 'px-6 pb-10 pt-6' : 'px-5')}>
+        <div className={cx('space-y-3', wide && 'mx-auto max-w-[640px] space-y-4')}>
         {wide && (
           <div className="px-1">
             <h1 className="text-[19px] font-bold tracking-tight">AI agents</h1>
@@ -450,26 +460,13 @@ export default function AgentScreen() {
         ) : (
           <>
             {keysSection}
-            {wide ? (
-              <div className="grid grid-cols-2 items-start gap-3">
-                <div className="space-y-3">
-                  {permsSection}
-                  {notifySection}
-                </div>
-                <div className="space-y-3">
-                  {connectSection}
-                  {recentSection}
-                </div>
-              </div>
-            ) : (
-              <>
-                {permsSection}
-                {notifySection}
-                {connectSection}
-              </>
-            )}
+            {connectSection}
+            {permsSection}
+            {notifySection}
+            {recentSection}
           </>
         )}
+        </div>
       </div>
     </div>
   );
