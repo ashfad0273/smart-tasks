@@ -68,8 +68,9 @@ the public. Tick items off as they are done.
 
 ## 4. Release process
 
-- [ ] 🤖 **Build Windows in GitHub Actions too** (not just on this PC), so a single tag
-      (`git tag v1.6.0 && git push --tags`) builds both apps and publishes them.
+- [x] 🤖 **Build Windows in GitHub Actions too** (`desktop-windows.yml`). A tag or a manual run
+      builds both apps; `npm run desktop:win:fetch`, `npm run desktop:mac:fetch` and
+      `npm run site:deploy` publish them.
 - [ ] 🤖 **Automated tests** in CI: type check, `npm run smoke`, a build of the extension,
       and `cargo check` for the desktop app on every push.
 - [ ] 🧑🤖 **Work on branches with pull requests** instead of committing straight to `main`.
