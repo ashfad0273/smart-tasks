@@ -2,6 +2,21 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## 1.8.1 - 2026-11-24
+
+### Changed
+- **The desktop app looks right at every window size.** The sidebar layout now starts at 720px wide, the sidebar narrows on small windows, and on very wide screens your list stays a comfortable centred column.
+- **Smoother task panel.** On smaller windows it slides over the list instead of squeezing it; on wide ones it grows open beside the list. Closing slides it shut.
+- **Tidier Settings.** One centred column with section titles above each card, and a section menu that stays in view while you scroll.
+- The new-task box opens right where the "Add a task" row is.
+- A task's Activity is folded away until you open it.
+- **Clearer device list.** Devices show as "Smart Tasks app on Windows" or "Extension in Comet on macOS", with an icon for each, instead of guessing from the browser engine (the app used to show as Edge).
+- For agents: after asking for your OK, an agent is told to schedule a check, so answers you give in the app get picked up.
+
+### Fixed
+- Confirm and New category dialogs are compact cards instead of stretching across the window.
+- Pressing Escape in a dialog closes just the dialog, not the page behind it.
+
 ## 1.8.0 - 2026-11-24
 
 ### Added
