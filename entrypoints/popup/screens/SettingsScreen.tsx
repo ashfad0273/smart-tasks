@@ -4,12 +4,13 @@ import { API_URL, SITE_URL } from '../../../lib/api';
 import { manifestVersion, onStorageChange, storageGet, storageSet } from '../../../lib/ext';
 import { REMINDERS_ENABLED_KEY, REMINDERS_KEY, UPDATE_KEY } from '../../../lib/keys';
 import { newer, type UpdateInfo } from '../../../lib/updater';
-import { desktopShortcut, isDesktopApp } from '../../../lib/desktop';
+import { desktopShortcut, isDesktopApp, isWebApp } from '../../../lib/desktop';
 import { formatDue } from '../../../lib/utils';
 import type { Reminder } from '../../../lib/reminders';
 import { useApp } from '../state/AppContext';
 import Avatar from '../components/Avatar';
 import SyncBadge from '../components/SyncBadge';
+import PhoneNotifications from '../components/PhoneNotifications';
 
 function Card({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -176,7 +177,10 @@ export default function SettingsScreen() {
               <Users size={12} /> Switch
             </button>
             {acc?.local ? (
-              <button onClick={() => app.setScreen('signup')} className="press btn-acc flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-xs font-semibold">
+              <button
+                onClick={() => app.setScreen('signup')}
+                className="press btn-acc flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-xs font-semibold"
+              >
                 Sync my tasks
               </button>
             ) : (
@@ -196,11 +200,7 @@ export default function SettingsScreen() {
               <SyncBadge state={app.sync} onClick={app.syncNow} />
             </Row>
           )}
-          <Row
-            icon={<Bell size={14} />}
-            label="Reminders"
-            sub={remindersOn && nextReminder ? `Next: ${formatDue(nextReminder.dueAt).label}` : undefined}
-          >
+          <Row icon={<Bell size={14} />} label="Reminders" sub={remindersOn && nextReminder ? `Next: ${formatDue(nextReminder.dueAt).label}` : undefined}>
             {remindersOn !== null && <Toggle label="Reminders" on={remindersOn} onChange={v => void toggleReminders(v)} />}
           </Row>
           <Row icon={<Tags size={14} />} label="Categories">
@@ -211,7 +211,11 @@ export default function SettingsScreen() {
           <Row
             icon={<Archive size={14} />}
             label="Archive"
-            sub={app.archivedTasks.length + app.archivedCategories.length > 0 ? `${app.archivedTasks.length} task${app.archivedTasks.length === 1 ? '' : 's'}, ${app.archivedCategories.length} categor${app.archivedCategories.length === 1 ? 'y' : 'ies'}` : 'Nothing archived'}
+            sub={
+              app.archivedTasks.length + app.archivedCategories.length > 0
+                ? `${app.archivedTasks.length} task${app.archivedTasks.length === 1 ? '' : 's'}, ${app.archivedCategories.length} categor${app.archivedCategories.length === 1 ? 'y' : 'ies'}`
+                : 'Nothing archived'
+            }
           >
             <button onClick={() => app.setScreen('archive')} className="press text-[12px] font-medium text-acc hover:underline">
               Open
@@ -241,21 +245,25 @@ export default function SettingsScreen() {
           </Row>
         </section>
 
-        <Card title="Shortcuts" icon={<Keyboard size={11} />}>
-          <ul className="mt-2.5 space-y-2 text-[12.5px] text-mut">
-            {[
-              ['Open', isDesktopApp() ? desktopShortcut() : 'Ctrl/⌘ + Shift + K'],
-              ['New task', 'N'],
-              ['Search', '/'],
-              ['Close', 'Esc'],
-            ].map(([what, key]) => (
-              <li key={what} className="flex items-center justify-between">
-                {what}
-                <kbd className="rounded-md border border-line bg-surface2 px-1.5 py-0.5 font-sans text-[10.5px] font-semibold text-txt">{key}</kbd>
-              </li>
-            ))}
-          </ul>
-        </Card>
+        {isWebApp() && acc && !acc.local && acc.token && <PhoneNotifications token={acc.token} />}
+
+        {!isWebApp() && (
+          <Card title="Shortcuts" icon={<Keyboard size={11} />}>
+            <ul className="mt-2.5 space-y-2 text-[12.5px] text-mut">
+              {[
+                ['Open', isDesktopApp() ? desktopShortcut() : 'Ctrl/⌘ + Shift + K'],
+                ['New task', 'N'],
+                ['Search', '/'],
+                ['Close', 'Esc'],
+              ].map(([what, key]) => (
+                <li key={what} className="flex items-center justify-between">
+                  {what}
+                  <kbd className="rounded-md border border-line bg-surface2 px-1.5 py-0.5 font-sans text-[10.5px] font-semibold text-txt">{key}</kbd>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
         <button
           onClick={() => void deleteAccount()}
@@ -270,7 +278,9 @@ export default function SettingsScreen() {
           </a>
           <span aria-hidden="true">·</span>
           <button
-            onClick={() => void chrome.tabs.create({ url: chrome.runtime.getURL(updateTo ? 'update.html?go=1' : 'update.html') })}
+            onClick={() =>
+              isWebApp() ? location.reload() : void chrome.tabs.create({ url: chrome.runtime.getURL(updateTo ? 'update.html?go=1' : 'update.html') })
+            }
             className={updateTo ? 'font-semibold text-acc hover:underline' : 'hover:text-txt hover:underline'}
           >
             {updateTo ? `Update to ${updateTo}` : 'Check for updates'}

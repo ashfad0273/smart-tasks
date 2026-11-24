@@ -233,6 +233,11 @@ fn set_badge(app: AppHandle, tooltip: String, tray: Vec<u8>, overlay: Option<Vec
 
 /// Start-at-login state, for the switch in Settings.
 #[tauri::command]
+fn idle_seconds() -> u64 {
+    system::idle_seconds()
+}
+
+#[tauri::command]
 fn get_autostart() -> bool {
     system::autostart_enabled()
 }
@@ -323,6 +328,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             show_window,
+            idle_seconds,
             open_url,
             notify,
             copy_text,

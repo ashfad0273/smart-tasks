@@ -5,12 +5,12 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const dir = fileURLToPath(new URL('./public', import.meta.url));
-const types = { '.html': 'text/html; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.md': 'text/markdown; charset=utf-8' };
+const types = { '.html': 'text/html; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.md': 'text/markdown; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.webmanifest': 'application/manifest+json' };
 const port = Number(process.env.PORT) || 4320;
 
 createServer(async (req, res) => {
   const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^([/\\])+/, '');
-  const file = join(dir, path || 'index.html');
+  const file = join(dir, !path || /[/\\]$/.test(path) ? join(path, 'index.html') : path);
   if (!file.startsWith(dir)) return res.writeHead(403).end();
   try {
     const body = await readFile(file);

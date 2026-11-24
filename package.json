@@ -2,7 +2,7 @@
   "name": "smart-tasks",
   "description": "A playful, synced to-do list Chrome extension backed by Cloudflare Workers.",
   "private": true,
-  "version": "1.8.3",
+  "version": "1.8.4",
   "type": "module",
   "scripts": {
     "dev": "wxt dev",
@@ -19,7 +19,9 @@
     "desktop:build": "node desktop/scripts/tauri.mjs build",
     "desktop:mac:fetch": "node desktop/scripts/fetch-mac.mjs",
     "desktop:win:fetch": "node desktop/scripts/fetch-win.mjs",
-    "desktop:compile": "tsc --noEmit -p desktop/tsconfig.json"
+    "desktop:compile": "tsc --noEmit -p desktop/tsconfig.json",
+    "web:dev": "vite -c web/vite.config.ts",
+    "web:build": "vite build -c web/vite.config.ts"
   },
   "dependencies": {
     "lucide-react": "^1.42.0",

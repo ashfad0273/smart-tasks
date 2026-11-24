@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import { sendPush, type PushSub } from './webpush';
 import { BadRequest, bitsToPerms, categoryDefaults, CLAIM_STALE_MS, DEFAULT_AGENT_PERMS, isOpen, LIMITS, mergeTask, permsToBits, taskDefaults, type AgentPerms, type Approval, type Change, type Req, type SyncOp } from './model';
 
 /**
@@ -10,6 +11,13 @@ import { BadRequest, bitsToPerms, categoryDefaults, CLAIM_STALE_MS, DEFAULT_AGEN
  * `changes since <rev>` — simple, gap-free, and offline-friendly.
  */
 const NOTICE_HOURLY_LIMIT = 30;
+/** When a phone gets notifications: every time, only with no desktop app open, only when the computer is idle, or never. */
+export type PushMode = 'always' | 'closed' | 'away' | 'off';
+export const PUSH_MODES: PushMode[] = ['always', 'closed', 'away', 'off'];
+/** A desktop app that has not reported its idle time for this long counts as idle. */
+const PRESENCE_STALE_MS = 3 * 60_000;
+type Presence = { at: number; input: number };
+type PushRow = { endpoint: string; p256dh: string; auth: string; session_id: string | null; mode: PushMode; away_min: number };
 /** A sent request nobody has claimed after this long gets a desktop notification. */
 export const UNCLAIMED_MS = 5 * 60_000;
 
@@ -75,6 +83,11 @@ export class UserHub extends DurableObject<Env> {
     if (!cols('notices').has('copy')) this.sql.exec(`ALTER TABLE notices ADD COLUMN copy TEXT`);
     // Requests already reported as unclaimed (by request id), so each is reported once.
     this.sql.exec(`CREATE TABLE IF NOT EXISTS nudged (rid TEXT PRIMARY KEY, at INTEGER NOT NULL)`);
+    // Phones (the installed web app) that get push notifications, and when.
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS push_subs (
+      endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, session_id TEXT,
+      mode TEXT NOT NULL DEFAULT 'away', away_min INTEGER NOT NULL DEFAULT 5, created_at INTEGER NOT NULL
+    )`);
     this.backfillActivity();
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
@@ -345,6 +358,7 @@ export class UserHub extends DurableObject<Env> {
     const done = new Set(this.sql.exec<{ rid: string }>(`SELECT rid FROM nudged`).toArray().map(r => r.rid));
     let next = Infinity;
     let sent = false;
+    const fresh: Array<{ id: number; title: string; message: string; copy: string }> = [];
     for (const t of this.list('task') as TaskRec[]) {
       if (t.completedAt != null || t.archivedAt != null) continue;
       for (const { sub, req } of requestsOf(t)) {
@@ -356,19 +370,28 @@ export class UserHub extends DurableObject<Env> {
         }
         const name = String(sub ? sub.title : t.title).slice(0, 200);
         const id = sub ? sub.id : t.id;
-        this.sql.exec(
-          `INSERT INTO notices (title, message, url, created_at, sender, copy) VALUES (?, ?, NULL, ?, 'Smart Tasks', ?)`,
-          `No agent picked up ${name}`.slice(0, 60),
-          `Nothing claimed it in 5 minutes. Copy the prompt and paste it into your agent: "${name.slice(0, 80)}"`.slice(0, 240),
-          now,
-          `Check Smart Tasks: run list_requests, claim and do request ${id}`,
-        );
+        const n = {
+          title: `No agent picked up ${name}`.slice(0, 60),
+          message: `Nothing claimed it in 5 minutes. Copy the prompt and paste it into your agent: "${name.slice(0, 80)}"`.slice(0, 240),
+          copy: `Check Smart Tasks: run list_requests, claim and do request ${id}`,
+        };
+        const nid = this.sql
+          .exec<{ id: number }>(
+            `INSERT INTO notices (title, message, url, created_at, sender, copy) VALUES (?, ?, NULL, ?, 'Smart Tasks', ?) RETURNING id`,
+            n.title,
+            n.message,
+            now,
+            n.copy,
+          )
+          .one().id;
+        fresh.push({ id: nid, ...n });
         this.sql.exec(`INSERT INTO nudged (rid, at) VALUES (?, ?) ON CONFLICT (rid) DO NOTHING`, req.id, now);
         sent = true;
       }
     }
     this.sql.exec(`DELETE FROM nudged WHERE at < ?`, now - 30 * 86_400_000);
     if (sent) this.ping({ type: 'notice' });
+    for (const n of fresh) await this.pushOut({ ...n, url: null });
     if (next !== Infinity) await this.ctx.storage.setAlarm(next);
   }
 
@@ -432,6 +455,7 @@ export class UserHub extends DurableObject<Env> {
     this.who = who;
     this.log(now, 'notice', null, n.title, 'agent', n.message);
     this.ping({ type: 'notice' });
+    this.ctx.waitUntil(this.pushOut({ id, ...n, from: who }));
     return { id };
   }
 
@@ -461,6 +485,7 @@ export class UserHub extends DurableObject<Env> {
 
   /** Disconnect the given sessions (they were just signed out). */
   kick(sessionIds: string[]): void {
+    this.pushForget(sessionIds);
     for (const id of sessionIds) {
       for (const ws of this.ctx.getWebSockets(id)) {
         try {
@@ -482,6 +507,79 @@ export class UserHub extends DurableObject<Env> {
       }
     }
     await this.ctx.storage.deleteAll();
+  }
+
+  /* ── phone push notifications ────────────────────────────────────── */
+
+  pushSubscribe(sessionId: string | null, sub: PushSub, mode: PushMode, awayMin: number): { mode: PushMode; awayMin: number } {
+    this.sql.exec(
+      `INSERT INTO push_subs (endpoint, p256dh, auth, session_id, mode, away_min, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, session_id = excluded.session_id,
+         mode = excluded.mode, away_min = excluded.away_min`,
+      sub.endpoint,
+      sub.p256dh,
+      sub.auth,
+      sessionId,
+      mode,
+      awayMin,
+      Date.now(),
+    );
+    return { mode, awayMin };
+  }
+
+  pushSettings(endpoint: string): { mode: PushMode; awayMin: number } | null {
+    const r = this.sql.exec<PushRow>(`SELECT * FROM push_subs WHERE endpoint = ?`, endpoint).toArray()[0];
+    return r ? { mode: r.mode, awayMin: r.away_min } : null;
+  }
+
+  pushUnsubscribe(endpoint: string): void {
+    this.sql.exec(`DELETE FROM push_subs WHERE endpoint = ?`, endpoint);
+  }
+
+  /** Phones of signed-out sessions stop getting notifications. */
+  pushForget(sessionIds: string[]): void {
+    for (const id of sessionIds) this.sql.exec(`DELETE FROM push_subs WHERE session_id = ?`, id);
+  }
+
+  /** Is a desktop app open, and how long since its computer last had keyboard or mouse input? */
+  desktopState(): { open: boolean; idleMs: number } {
+    const now = Date.now();
+    let open = false;
+    let idleMs = Infinity;
+    for (const ws of this.ctx.getWebSockets('k:desktop')) {
+      open = true;
+      const p = ws.deserializeAttachment() as Presence | null;
+      // Older apps never report: count them as in use while they are open.
+      if (!p) idleMs = 0;
+      else if (now - p.at < PRESENCE_STALE_MS) idleMs = Math.min(idleMs, Math.max(0, now - p.input));
+    }
+    return { open, idleMs };
+  }
+
+  /** Send a notice to every phone whose setting says it should get it now (all of them for a test). */
+  async pushOut(n: { id: number; title: string; message: string; url: string | null; copy?: string; from?: string | null }, test = false): Promise<number> {
+    const pub = this.env.VAPID_PUBLIC;
+    const priv = this.env.VAPID_PRIVATE;
+    if (!pub || !priv) return 0;
+    const rows = this.sql.exec<PushRow>(`SELECT * FROM push_subs`).toArray();
+    if (!rows.length) return 0;
+    const desk = this.desktopState();
+    const keys = { pub, priv, contact: 'https://smart-tasks.ashfadhossain0.workers.dev' };
+    let sent = 0;
+    await Promise.all(
+      rows.map(async r => {
+        const due =
+          test ||
+          r.mode === 'always' ||
+          (r.mode === 'closed' && !desk.open) ||
+          (r.mode === 'away' && (!desk.open || desk.idleMs >= r.away_min * 60_000));
+        if (!due) return;
+        const res = await sendPush(r, { ...n, tag: `notice-${n.id}` }, keys);
+        if (res === 'gone') this.sql.exec(`DELETE FROM push_subs WHERE endpoint = ?`, r.endpoint);
+        if (res === 'sent') sent++;
+      }),
+    );
+    return sent;
   }
 
   /* ── WebSocket fan-out ───────────────────────────────────────────── */
@@ -507,13 +605,25 @@ export class UserHub extends DurableObject<Env> {
     // Tag the socket with its session so the device list can show who's online
     // and a signed-out device can be disconnected immediately.
     const sid = request.headers.get('X-Session-Id');
-    this.ctx.acceptWebSocket(server, sid ? [sid] : []);
+    const tags = sid ? [sid] : [];
+    // Desktop apps are tagged so phones know whether one is open (and idle).
+    if (request.headers.get('X-Client-Kind') === 'desktop') tags.push('k:desktop');
+    this.ctx.acceptWebSocket(server, tags);
     server.send(JSON.stringify({ type: 'rev', rev: this.rev() }));
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  async webSocketMessage(): Promise<void> {
-    // Clients only listen; pings are answered by the auto-response.
+  /** Pings are answered by the auto-response. The desktop app reports its computer's idle time: {"type":"presence","idle":<seconds>}. */
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    if (typeof message !== 'string' || message.length > 200) return;
+    try {
+      const m = JSON.parse(message) as { type?: string; idle?: unknown };
+      if (m.type !== 'presence' || typeof m.idle !== 'number' || !Number.isFinite(m.idle)) return;
+      const now = Date.now();
+      ws.serializeAttachment({ at: now, input: now - Math.max(0, Math.min(m.idle, 7 * 86_400)) * 1000 } satisfies Presence);
+    } catch {
+      /* not JSON */
+    }
   }
 
   async webSocketClose(ws: WebSocket, code: number): Promise<void> {

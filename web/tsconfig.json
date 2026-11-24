@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "include": [".", "../entrypoints", "../lib", "../env.d.ts"],
+  "exclude": ["dist", "public"]
+}

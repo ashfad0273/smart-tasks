@@ -190,6 +190,8 @@ export function startHost() {
   });
 
   if (!inTauri) return; // plain browser (layout checks): no tray, no updater
+  // Read by the realtime connection (AppContext), which reports it to the server for phones.
+  (globalThis as { __stIdleSeconds?: () => Promise<number> }).__stIdleSeconds = () => invoke<number>('idle_seconds');
 
   // Settings → "Open at login" talks to the app through this.
   (globalThis as { __ST_HOST__?: DesktopHost }).__ST_HOST__ = {

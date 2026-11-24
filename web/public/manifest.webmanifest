@@ -1,0 +1,16 @@
+{
+  "name": "Smart Tasks",
+  "short_name": "Smart Tasks",
+  "description": "Your tasks, synced everywhere, with OKs for your AI agents.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#10191c",
+  "theme_color": "#10191c",
+  "icons": [
+    { "src": "icon-128.png", "sizes": "128x128", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

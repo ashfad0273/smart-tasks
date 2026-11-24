@@ -2,6 +2,7 @@ import { hashPassword, randomToken, sha256, verifyGoogleIdToken, verifyPassword 
 import { BadRequest, parseOps, parsePerms } from './model';
 import { handleMcp } from './mcp';
 import { PRIVACY_HTML } from './privacy';
+import { PUSH_MODES, type PushMode } from './hub';
 
 export { UserHub } from './hub';
 
@@ -33,6 +34,8 @@ export { UserHub } from './hub';
  *   DELETE /v1/sessions/:id           sign that device out
  *   DELETE /v1/sessions?others=1      sign out every other device
  *   GET    /v1/activity?cursor=<next>&limit=<n> → {events: [{id, at, type, taskId, title, by}], next}
+ *   GET|POST|DELETE /v1/push      phone push: {publicKey, settings} / subscribe {subscription, mode, awayMin} / {endpoint}
+ *   POST   /v1/push/test          send a test notification to every phone
  *   GET    /v1/notices?after=<id>     → {latest, notices: [{id, title, message, url, createdAt}]}  (agent notifications)
  *   POST   /mcp                       MCP endpoint for AI agents (Bearer stk_… token)
  */
@@ -411,6 +414,8 @@ async function route(req: Request, env: Env): Promise<Response> {
     const user = await authenticate(env, url.searchParams.get('token'), req);
     const headers = new Headers(req.headers);
     headers.set('X-Session-Id', user.session_id);
+    // Browsers can't send X-Client on a WebSocket: use the label this session already has.
+    if ((user as { device?: string | null }).device?.startsWith('Smart Tasks app')) headers.set('X-Client-Kind', 'desktop');
     return hub(env, user.id).fetch(new Request('https://hub/ws', { headers }));
   }
 
@@ -419,6 +424,7 @@ async function route(req: Request, env: Env): Promise<Response> {
 
   if (p === '/v1/auth/logout' && m === 'POST') {
     await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256(token!)).run();
+    await hub(env, user.id).pushForget([user.session_id]);
     return json({ ok: true });
   }
   if (p === '/v1/me') {
@@ -450,6 +456,38 @@ async function route(req: Request, env: Env): Promise<Response> {
   }
   if (p === '/v1/stats' && m === 'GET') {
     return json(await hub(env, user.id).stats());
+  }
+  // Phone push notifications (the installed web app). Body: {subscription: PushSubscription JSON, mode, awayMin}.
+  if (p === '/v1/push') {
+    const h = hub(env, user.id);
+    if (m === 'GET') {
+      const endpoint = url.searchParams.get('endpoint') ?? '';
+      return json({ publicKey: env.VAPID_PUBLIC || null, settings: endpoint ? await h.pushSettings(endpoint) : null });
+    }
+    const b = await readJson<{ subscription?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } }; endpoint?: string; mode?: string; awayMin?: number }>(req);
+    if (m === 'DELETE') {
+      if (typeof b.endpoint === 'string') await h.pushUnsubscribe(b.endpoint.slice(0, 1000));
+      return json({ ok: true });
+    }
+    if (m === 'POST') {
+      const s = b.subscription;
+      const endpoint = s?.endpoint ?? '';
+      // Push services are https; a local test receiver is allowed only while the API itself runs locally.
+      const local = url.hostname === 'localhost' && /^http:\/\/localhost[:/]/.test(endpoint);
+      if ((!/^https:\/\//.test(endpoint) && !local) || endpoint.length > 1000 || !s?.keys?.p256dh || !s.keys.auth)
+        throw new HttpError(400, 'bad-subscription', 'That is not a push subscription.');
+      const mode = (PUSH_MODES as string[]).includes(b.mode ?? '') ? (b.mode as PushMode) : 'away';
+      const awayMin = Math.min(120, Math.max(1, Math.round(Number(b.awayMin) || 5)));
+      const sub = { endpoint, p256dh: String(s.keys.p256dh).slice(0, 200), auth: String(s.keys.auth).slice(0, 100) };
+      return json({ settings: await h.pushSubscribe(user.session_id, sub, mode, awayMin) });
+    }
+  }
+  if (p === '/v1/push/test' && m === 'POST') {
+    const sent = await hub(env, user.id).pushOut(
+      { id: Date.now(), title: 'Smart Tasks', message: 'Notifications work on this phone.', url: null },
+      true,
+    );
+    return json({ sent });
   }
   if (p === '/v1/notices' && m === 'GET') {
     const after = Math.max(0, Math.floor(Number(url.searchParams.get('after')) || 0));

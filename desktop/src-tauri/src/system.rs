@@ -135,3 +135,47 @@ pub fn open_url(url: &str) -> Result<(), String> {
     };
     cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
 }
+
+/// Seconds since the last keyboard or mouse input anywhere on this computer
+/// (phones use it to decide whether you are away). 0 where it can't be read.
+#[cfg(windows)]
+pub fn idle_seconds() -> u64 {
+    #[repr(C)]
+    struct LastInputInfo {
+        size: u32,
+        time: u32,
+    }
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetLastInputInfo(plii: *mut LastInputInfo) -> i32;
+    }
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetTickCount() -> u32;
+    }
+    let mut info = LastInputInfo { size: std::mem::size_of::<LastInputInfo>() as u32, time: 0 };
+    // SAFETY: plain Win32 calls with a correctly sized struct.
+    unsafe {
+        if GetLastInputInfo(&mut info) == 0 {
+            return 0;
+        }
+        u64::from(GetTickCount().wrapping_sub(info.time)) / 1000
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub fn idle_seconds() -> u64 {
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventSourceSecondsSinceLastEventType(state: i32, event_type: u32) -> f64;
+    }
+    // kCGEventSourceStateCombinedSessionState = 0, kCGAnyInputEventType = !0.
+    // SAFETY: a pure query with constant arguments.
+    let s = unsafe { CGEventSourceSecondsSinceLastEventType(0, u32::MAX) };
+    if s.is_finite() && s > 0.0 { s as u64 } else { 0 }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+pub fn idle_seconds() -> u64 {
+    0
+}

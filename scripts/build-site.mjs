@@ -46,6 +46,18 @@ copyFileSync(join(root, 'public/icon/128.png'), join(out, 'icon-128.png'));
 // The Claude Code watcher the agent guide tells people to install (tools/smart-tasks-watch.mjs).
 copyFileSync(join(root, 'tools/smart-tasks-watch.mjs'), join(out, 'smart-tasks-watch.mjs'));
 
+// The installable phone app (web/), served at /app/. Always built fresh against the live API.
+{
+  const env = { ...process.env };
+  delete env.VITE_API_URL;
+  execFileSync(process.execPath, [join(root, 'node_modules/vite/bin/vite.js'), 'build', '-c', 'web/vite.config.ts', '--logLevel', 'warn'], { cwd: root, env, stdio: 'inherit' });
+  const webDist = join(root, 'web/dist');
+  for (const f of readdirSync(join(webDist, 'assets')))
+    if (f.endsWith('.js') && readFileSync(join(webDist, 'assets', f), 'utf8').includes('localhost:8787'))
+      throw new Error('web/dist was built against a local API.');
+  cpSync(webDist, join(out, 'app'), { recursive: true });
+}
+
 /* ── changelog markdown → HTML (just the subset CHANGELOG.md uses) ───────── */
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`(.+?)`/g, '<code>$1</code>');
@@ -284,6 +296,17 @@ writeFileSync(
     '  Cache-Control: no-cache',
     '/index.html',
     '  Cache-Control: no-cache',
+    // Phone app: the page and service worker always fresh; hashed assets are immutable.
+    '/app/',
+    '  Cache-Control: no-cache',
+    '/app/index.html',
+    '  Cache-Control: no-cache',
+    '/app/sw.js',
+    '  Cache-Control: no-cache',
+    '/app/manifest.webmanifest',
+    '  Cache-Control: no-cache',
+    '/app/assets/*',
+    '  Cache-Control: public, max-age=31536000, immutable',
     '',
   ].join('\n'),
 );

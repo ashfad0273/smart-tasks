@@ -2,6 +2,16 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## 1.8.4 - 2026-11-25
+
+### Added
+- **Smart Tasks on your phone.** Open the download page on your phone and tap **Open the phone app**, then install it from the browser menu ("Install app" or "Add to Home screen"). It is the same app with the same account, full screen and working offline.
+- **Phone notifications from your AI agents.** In the phone app's Settings, pick when the phone should get agent messages and "No agent picked up" alerts: when you're away from your computer (no desktop app open, or no keyboard or mouse use for a few minutes you choose), only when no desktop app is open, always, or never. They arrive even when the phone app is closed. Settings → Phone notifications also has a **Send a test** button.
+- The desktop app now tells your phone whether it's open and in use, so the phone can stay quiet while you're at your computer.
+
+### Notes
+- Due-date reminders on the phone fire only while the phone app is open.
+
 ## 1.8.3 - 2026-11-25
 
 ### Added

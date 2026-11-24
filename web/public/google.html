@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Signing in…</title>
+    <style>
+      html { background: #10191c; color: #8fa3a8; font: 500 15px system-ui, sans-serif; }
+      body { display: grid; place-items: center; height: 100vh; margin: 0; }
+    </style>
+  </head>
+  <body>
+    <p>Signing in… you can close this window.</p>
+    <script>
+      // Google comes back here with #id_token=…; hand the whole URL to the app and close.
+      try {
+        const ch = new BroadcastChannel('st-google');
+        ch.postMessage(location.href);
+        ch.close();
+      } catch {}
+      setTimeout(() => window.close(), 300);
+    </script>
+  </body>
+</html>

@@ -6,4 +6,7 @@ interface Env {
   EMAIL?: SendEmail;
   GOOGLE_CLIENT_ID: string;
   EMAIL_FROM: string;
+  /** Web Push (phones): public key as a var, private key as a secret. */
+  VAPID_PUBLIC?: string;
+  VAPID_PRIVATE?: string;
 }

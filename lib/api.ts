@@ -4,8 +4,8 @@ import type { AuthUser, Change, SyncOp } from './types';
  * API base URL, baked in at build time. Override with VITE_API_URL in `.env`
  * (see .env.example), e.g. http://localhost:8787 for `wrangler dev`.
  */
-export const API_URL: string = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, '') ||
-  'https://smart-tasks-api.ashfadhossain0.workers.dev';
+export const API_URL: string =
+  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, '') || 'https://smart-tasks-api.ashfadhossain0.workers.dev';
 
 /** Public download page and changelog (static site on Workers, see site/). */
 export const SITE_URL = 'https://smart-tasks.ashfadhossain0.workers.dev';
@@ -31,9 +31,22 @@ function clientLabel(): string {
   const nav = navigator as Navigator & { userAgentData?: { brands?: Array<{ brand: string }>; platform?: string }; brave?: unknown };
   const ua = navigator.userAgent;
   const p = nav.userAgentData?.platform || ua;
-  const os = /Win/i.test(p) ? 'Windows' : /Mac/i.test(p) ? 'macOS' : /CrOS|Chrome OS/i.test(p) ? 'ChromeOS' : /Linux/i.test(p) ? 'Linux' : '';
+  const os = /Android/i.test(p + ua)
+    ? 'Android'
+    : /iPhone|iPad|iOS/i.test(p + ua)
+      ? 'iOS'
+      : /Win/i.test(p)
+        ? 'Windows'
+        : /Mac/i.test(p)
+          ? 'macOS'
+          : /CrOS|Chrome OS/i.test(p)
+            ? 'ChromeOS'
+            : /Linux/i.test(p)
+              ? 'Linux'
+              : '';
   const on = os ? ` on ${os}` : '';
   if ((globalThis as { __ST_DESKTOP__?: boolean }).__ST_DESKTOP__) return `Smart Tasks app${on}`;
+  if ((globalThis as { __ST_WEB__?: boolean }).__ST_WEB__) return `Phone app${on}`;
   const brand = nav.userAgentData?.brands?.map(b => b.brand).find(b => !/Chromium|Not.?A.?Brand/i.test(b));
   const browser = nav.brave
     ? 'Brave'
@@ -150,6 +163,14 @@ export interface ActivityEvent {
   agent?: string | null;
 }
 
+/** When this phone gets notifications: always, with no desktop app open, when away from the computer, or never. */
+export type PushMode = 'always' | 'closed' | 'away' | 'off';
+export interface PushSettings {
+  mode: PushMode;
+  /** "Away" means no keyboard or mouse input on the computer for this many minutes. */
+  awayMin: number;
+}
+
 const post = (body: unknown) => ({ method: 'POST', body: JSON.stringify(body) });
 
 export const api = {
@@ -158,14 +179,12 @@ export const api = {
   login: (email: string, password: string) => call<AuthResult>('/v1/auth/login', post({ email, password })),
   google: (idToken: string, nonce: string) => call<AuthResult>('/v1/auth/google', post({ idToken, nonce })),
   resetRequest: (email: string) => call<{ ok: true }>('/v1/auth/reset/request', post({ email })),
-  resetConfirm: (email: string, code: string, password: string) =>
-    call<AuthResult>('/v1/auth/reset/confirm', post({ email, code, password })),
+  resetConfirm: (email: string, code: string, password: string) => call<AuthResult>('/v1/auth/reset/confirm', post({ email, code, password })),
   logout: (token: string) => call<{ ok: true }>('/v1/auth/logout', { method: 'POST', token }),
   me: (token: string) => call<{ user: AuthUser }>('/v1/me', { token }),
   rename: (token: string, name: string) => call<{ user: AuthUser }>('/v1/me', { method: 'PATCH', body: JSON.stringify({ name }), token }),
   deleteAccount: (token: string) => call<{ ok: true }>('/v1/me', { method: 'DELETE', token }),
-  pull: (token: string, since: number) =>
-    call<{ rev: number; changes: Change[]; more: boolean }>(`/v1/sync?since=${since}`, { token }),
+  pull: (token: string, since: number) => call<{ rev: number; changes: Change[]; more: boolean }>(`/v1/sync?since=${since}`, { token }),
   push: (token: string, ops: SyncOp[]) => call<{ rev: number }>('/v1/sync', { ...post({ ops }), token }),
   agentKeys: (token: string) => call<{ keys: AgentKey[] }>('/v1/agent-keys', { token }),
   createAgentKey: (token: string, name: string, timeZone: string) =>
@@ -187,5 +206,12 @@ export const api = {
     ),
   /** Last 30 days of changes, and how many each named agent made. */
   stats: (token: string) => call<AgentStats>('/v1/stats', { token }),
+  /** Phone push: the server's public key, and this phone's settings (by its subscription endpoint). */
+  pushInfo: (token: string, endpoint = '') =>
+    call<{ publicKey: string | null; settings: PushSettings | null }>(`/v1/push?endpoint=${encodeURIComponent(endpoint)}`, { token }),
+  pushSubscribe: (token: string, subscription: PushSubscriptionJSON, settings: PushSettings) =>
+    call<{ settings: PushSettings }>('/v1/push', { ...post({ subscription, ...settings }), token }),
+  pushUnsubscribe: (token: string, endpoint: string) => call<{ ok: true }>('/v1/push', { method: 'DELETE', body: JSON.stringify({ endpoint }), token }),
+  pushTest: (token: string) => call<{ sent: number }>('/v1/push/test', { method: 'POST', token }),
   wsUrl: (token: string) => `${API_URL.replace(/^http/, 'ws')}/v1/ws?token=${encodeURIComponent(token)}`,
 };

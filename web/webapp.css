@@ -1,0 +1,41 @@
+/* The phone app fills the screen instead of the popup's fixed 400×600 box,
+   and keeps clear of the status bar, notch and gesture bar. */
+html.webapp,
+html.webapp body {
+  width: 100%;
+  height: 100%;
+}
+
+html.webapp body {
+  display: block;
+  background: var(--bg-gradient);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.webapp #root {
+  width: 100%;
+  height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  box-sizing: border-box;
+}
+
+/* A tablet or desktop browser: keep the phone-sized column centred. */
+@media (min-width: 700px) {
+  html.webapp body {
+    display: grid;
+    place-items: center;
+    background: #0b1011;
+  }
+  html.webapp #root {
+    width: 440px;
+    height: min(100dvh, 900px);
+    border-radius: 24px;
+    border: 1px solid var(--color-line);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+  }
+}

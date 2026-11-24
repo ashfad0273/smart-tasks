@@ -300,9 +300,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const connect = () => {
       ws = new WebSocket(api.wsUrl(token));
+      // Desktop app only: report this computer's idle time once a minute, so phones
+      // set to "when I'm away" know whether you are at the computer.
+      const idle = (globalThis as { __stIdleSeconds?: () => Promise<number> }).__stIdleSeconds;
+      let beats = 0;
+      const presence = () => {
+        if (!idle || ws?.readyState !== WebSocket.OPEN) return;
+        void idle()
+          .then(s => ws?.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: 'presence', idle: s })))
+          .catch(() => {});
+      };
       ws.onopen = () => {
         retry = 0;
-        pingTimer = setInterval(() => ws?.readyState === WebSocket.OPEN && ws.send('ping'), 25_000);
+        presence();
+        pingTimer = setInterval(() => {
+          if (ws?.readyState === WebSocket.OPEN) ws.send('ping');
+          if (++beats % 2 === 0) presence(); // every 50 s
+        }, 25_000);
       };
       ws.onmessage = async e => {
         if (typeof e.data !== 'string' || !e.data.startsWith('{')) return;

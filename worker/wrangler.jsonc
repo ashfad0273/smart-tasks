@@ -33,7 +33,10 @@
     "GOOGLE_CLIENT_ID": "398680487131-fhd2tm0c7ps42ma8124qr0aeeuunhlqh.apps.googleusercontent.com",
     // Optional: sender for password-reset codes. Needs Cloudflare Email
     // Sending enabled on the domain AND the send_email binding below.
-    "EMAIL_FROM": ""
+    "EMAIL_FROM": "",
+    // Web Push public key for phones (the private half is the VAPID_PRIVATE secret,
+    // kept in ~/.smart-tasks/vapid.json on the release machine).
+    "VAPID_PUBLIC": "BANIx_N6obstkhRLqo4sGykIMH5WL1zERWLZHbMmF0hJYTHmcRvucGJpvcmt4sBqMNEQpDXBqxBHUw1kGXfIaFs"
   }
 
   // Uncomment once `wrangler email sending enable yourdomain.com` succeeded:

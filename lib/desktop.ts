@@ -15,9 +15,12 @@ export type NotifyKind = 'reminders' | 'agent';
 /** True inside the desktop app itself (set by desktop/web/shim.ts). */
 export const isDesktopApp = (): boolean => !!(globalThis as { __ST_DESKTOP__?: boolean }).__ST_DESKTOP__;
 
+/** True in the installable phone web app (set by web/shim.ts). */
+export const isWebApp = (): boolean => !!(globalThis as { __ST_WEB__?: boolean }).__ST_WEB__;
+
 /** Is the Windows app on this computer showing `kind` notifications for `uid` right now? */
 export async function desktopHandles(uid: string, kind: NotifyKind): Promise<boolean> {
-  if (isDesktopApp()) return false;
+  if (isDesktopApp() || isWebApp()) return false;
   try {
     const res = await fetch(`http://127.0.0.1:${DESKTOP_PORT}/v1/handles?kind=${kind}&uid=${encodeURIComponent(uid)}`, {
       cache: 'no-store',
