@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { BellRing, Bot, Check, ChevronLeft, Copy, KeyRound, Pencil, Plus, ShieldCheck, Volume2 } from 'lucide-react';
 import { storageGet, storageSet } from '../../../lib/ext';
 import { AGENT_CLIENT_KEY, AGENT_NOTIFY_KEY, AGENT_SOUND_KEY } from '../../../lib/keys';
-import { AGENT_CLIENTS } from '../../../lib/agents';
+import { AGENT_CLIENTS, AGENT_GUIDE } from '../../../lib/agents';
 import { cx } from '../../../lib/utils';
 import ScrollRow from '../components/ScrollRow';
 import { Toggle } from './SettingsScreen';
@@ -371,6 +371,19 @@ export default function AgentScreen() {
                 />
                 {client.after && <p className="mt-1.5 text-[11px] text-mut">{client.after}</p>}
                 {!fresh && <p className="mt-1.5 text-[11px] text-mut">Add a key above, then copy this: YOUR_KEY is filled in for you.</p>}
+              </div>
+              <div className="mx-3.5 mt-3 rounded-xl border border-white/[.06] bg-black/20 px-3 py-2.5">
+                <div>
+                  <p className="text-[12px] font-semibold text-txt">Teach your AI how Smart Tasks works</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-mut">One prompt for any AI: the tools, when to ask you for an OK, and how to pick up and report back on what you approve.</p>
+                </div>
+                <button
+                  onClick={() => void copy('guide', AGENT_GUIDE)}
+                  className="press mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg bg-acc/15 px-3 text-[11.5px] font-semibold text-acc hover:bg-acc/25"
+                >
+                  {copied === 'guide' ? <Check size={13} className="anim-check" /> : <Copy size={13} />}
+                  {copied === 'guide' ? 'Copied' : 'Copy prompt'}
+                </button>
               </div>
             </section>
   );

@@ -137,6 +137,22 @@ export default defineBackground(() => {
     }
   }
 
+  /** Clipboard from the service worker: via the offscreen page (or the desktop app's host). */
+  async function copyText(text: string): Promise<void> {
+    try {
+      const open = await chrome.runtime.getContexts({ contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT] });
+      if (open.length) await chrome.runtime.sendMessage({ type: 'st-offscreen-copy', text });
+      else
+        await chrome.offscreen.createDocument({
+          url: `offscreen.html#copy=${encodeURIComponent(text)}`,
+          reasons: [chrome.offscreen.Reason.CLIPBOARD],
+          justification: 'Copy the prompt from a notification to the clipboard.',
+        });
+    } catch {
+      /* nothing else to try from a notification */
+    }
+  }
+
   // One check at a time, so a WS nudge and the minute alarm can't show a notice twice.
   let noticeCheck: Promise<void> | null = null;
   function checkNotices(): Promise<void> {
@@ -174,8 +190,10 @@ export default defineBackground(() => {
                   contextMessage: `From ${n.from || 'your AI agent'}${reg.accounts.filter(x => !x.local).length > 1 ? ` · ${a.email}` : ''}`,
                   priority: 2,
                   silent: true, // our own chime plays instead of the system sound
+                  ...(n.copy ? { buttons: [{ title: 'Copy prompt' }], requireInteraction: true } : {}),
                 });
                 if (n.url) links[id] = n.url;
+                if (n.copy) links[`copy:${id}`] = n.copy;
               }
               await storageSet(NOTICE_LINKS_KEY, Object.fromEntries(Object.entries(links).slice(-50)));
               await playChime();
@@ -388,6 +406,14 @@ export default defineBackground(() => {
   });
 
   chrome.notifications.onButtonClicked.addListener((id, button) => {
+    if (id.startsWith('st-agent:')) {
+      void chrome.notifications.clear(id);
+      void storageGet<Record<string, string>>(NOTICE_LINKS_KEY, {}).then(links => {
+        const text = links[`copy:${id}`];
+        if (button === 0 && text) void copyText(text);
+      });
+      return;
+    }
     if (id === 'st-update') {
       void chrome.notifications.clear(id);
       void chrome.tabs.create({ url: `${UPDATE_PAGE()}?go=1` });

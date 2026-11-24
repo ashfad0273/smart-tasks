@@ -1,4 +1,5 @@
-import { parseOps, type AgentPerm, type AgentPerms, type SyncOp } from './model';
+import { BadRequest, cleanApproval, CLAIM_STALE_MS, isOpen, parseOps, type AgentPerm, type AgentPerms, type Approval, type Req, type SyncOp } from './model';
+import { requestsOf, type ReqRef } from './hub';
 import type { UserHub } from './hub';
 
 /**
@@ -159,7 +160,12 @@ async function categoryId(ctx: Ctx, name: unknown, create: boolean): Promise<str
 }
 
 function view(t: Rec, cats: Map<string, string>, tz: string, archived = false) {
-  const subs = (t.subtasks as Array<{ title: string; done: boolean }>) ?? [];
+  const subs = (t.subtasks as Array<{ title: string; done: boolean; approval?: Approval | null; aiRequest?: Req | null }>) ?? [];
+  const mark = (s: (typeof subs)[number]) => {
+    const r = s.aiRequest;
+    if (r && r.status !== 'cancelled') return ` (request ${r.status === 'approved' ? 'sent by user, waiting' : r.status === 'returned' ? 'handed back to user' : r.status})`;
+    return s.approval && !s.done ? ' (awaiting user OK)' : '';
+  };
   return {
     id: t.id,
     title: t.title,
@@ -173,7 +179,7 @@ function view(t: Rec, cats: Map<string, string>, tz: string, archived = false) {
     added: typeof t.createdAt === 'number' ? fmtLocal(t.createdAt, tz) : null,
     ...(typeof t.completedAt === 'number' ? { completed: fmtLocal(t.completedAt, tz) } : {}),
     ...(archived ? { archived: true } : {}),
-    ...(subs.length ? { subtasks: subs.map((s, i) => `${i + 1}. ${s.done ? '[x]' : '[ ]'} ${s.title}`), subtasksDone: `${subs.filter(s => s.done).length}/${subs.length}` } : {}),
+    ...(subs.length ? { subtasks: subs.map((s, i) => `${i + 1}. ${s.done ? '[x]' : '[ ]'} ${s.title}${mark(s)}`), subtasksDone: `${subs.filter(s => s.done).length}/${subs.length}` } : {}),
   };
 }
 
@@ -184,17 +190,33 @@ const catMap = async (ctx: Ctx) => new Map((await list(ctx, 'category')).map(c =
 const DUE_DESC =
   'Date-time in the user\'s local time as "YYYY-MM-DDTHH:mm" (e.g. "2026-11-24T17:00"), or an ISO string with an offset. A date alone means 5 PM that day. null clears it.';
 
+const APPROVAL_SCHEMA = {
+  type: ['object', 'null'],
+  description:
+    'Makes this item approvable: the user gets an OK button labelled with `action`, and pressing it sends you a request (list_requests). ' +
+    'Set it ONLY when all of these hold: (a) you propose one specific action, (b) an agent can do all of it, (c) nothing else blocks it, (d) it is a real ask, not a status or tracking item. ' +
+    'Never for steps only the user can do (downloads to their computer, passphrases, closing tabs, wp-admin logins). Leave it out otherwise: no approval means no button.',
+  properties: {
+    action: { type: 'string', description: 'Exactly what you will do on OK, e.g. "Delete classes clip-lg/md/sm and media 74, 80-84, then remake the package". Up to 300 characters.' },
+    choices: { type: 'array', items: { type: 'string' }, description: 'For decisions: one button per choice (up to 6), e.g. ["Both", "Badge only", "Leave out"]. The picked text arrives as userAnswer.' },
+    confirm: { type: 'boolean', description: 'true for irreversible actions (delete, upload, replace, send): the user confirms once more before it is sent.' },
+  },
+  required: ['action'],
+};
+
 const TOOLS = [
   {
     name: 'list_requests',
     title: 'Tasks the user approved for AI',
     description:
-      'Tasks the user sent to AI, waiting for an agent to do them. Each has userAnswer: either a plain OK or the user\'s own written answer/instructions for that task (follow it). Requests from tasks you (this key and session) created are shown first; ' +
-      'others become visible to any agent after 10 minutes. Call this when checking in (e.g. on a /loop), then claim_request before starting.',
+      'Items the user approved for AI (tasks or single subtasks they pressed OK on), waiting for an agent. Each has `request` (the id to claim), `action` (what was proposed) and userAnswer: a plain OK, the choice they picked, or their own written answer (follow it). ' +
+      'Requests from tasks you (this key and session) created come first. After 10 minutes the rest are offered to other agents, but only within the same `scope`: pass yours if you set one on add_task. Requests are never offered across scopes. ' +
+      'Call this when checking in (e.g. on a /loop), then claim_request before starting.',
     inputSchema: {
       type: 'object',
       properties: {
         session: { type: 'string', description: 'Your session id, the same one you passed to add_task.' },
+        scope: { type: 'string', description: 'Your scope (same value you pass to add_task), e.g. repo folder plus template name.' },
         mine_only: { type: 'boolean', description: 'Only requests for tasks this key/session created. Default false.' },
       },
     },
@@ -203,21 +225,23 @@ const TOOLS = [
   {
     name: 'claim_request',
     title: 'Start an approved task',
-    description: 'Claim an approved task so no other agent picks it up, then do the work.',
+    description: 'Claim a request (its `request` id from list_requests) so no other agent picks it up, then do the work. Claiming is atomic: if another session got there first you are told who has it.',
     inputSchema: {
       type: 'object',
-      properties: { id: { type: 'string' }, session: { type: 'string' } },
+      properties: { id: { type: 'string', description: 'The `request` id from list_requests (a task id or a subtask id).' }, session: { type: 'string' }, scope: { type: 'string' } },
       required: ['id'],
     },
   },
   {
     name: 'finish_request',
     title: 'Report an approved task done',
-    description: 'Report the result of a claimed task. Marks it done unless done=false (e.g. it failed or needs the user), and records your note.',
+    description:
+      'Report the result of a claimed request. done (default): the subtask is ticked (the task is completed once every subtask is done) and your result shows as a note. ' +
+      'done=false hands it back: the user sees your reason above the OK button, and their next answer comes back as a new request.',
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'string' },
+        id: { type: 'string', description: 'The request id you claimed.' },
         result: { type: 'string', description: 'Short summary of what you did, or why it could not be done.' },
         done: { type: 'boolean', description: 'Default true. false hands it back to the user.' },
       },
@@ -245,7 +269,9 @@ const TOOLS = [
   {
     name: 'add_task',
     title: 'Add a task',
-    description: 'Create a new task. A category that does not exist yet is created.',
+    description:
+      'Create a new task. A category that does not exist yet is created. To ask the user to OK something you can do, put `approval` on the subtask it belongs to ' +
+      '(or on the task when it has no subtasks); plain items get no OK button. Steps only the user can do (downloads to their computer, passphrases, closing tabs, wp-admin logins) never get approval.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -254,8 +280,14 @@ const TOOLS = [
         due: { type: ['string', 'null'], description: DUE_DESC },
         priority: { type: ['string', 'null'], enum: ['low', 'medium', 'high', null] },
         category: { type: 'string', description: 'Category name.' },
-        subtasks: { type: 'array', items: { type: 'string' }, description: 'Checklist items.' },
-        session: { type: 'string', description: 'Your session id (e.g. Claude Code session id), so approved follow-ups come back to you.' },
+        subtasks: {
+          type: 'array',
+          items: { anyOf: [{ type: 'string' }, { type: 'object', properties: { title: { type: 'string' }, approval: APPROVAL_SCHEMA }, required: ['title'] }] },
+          description: 'Checklist items: plain strings, or {title, approval} for a step you can do once the user OKs it.',
+        },
+        approval: { ...APPROVAL_SCHEMA, description: 'Only for a task without subtasks. ' + APPROVAL_SCHEMA.description },
+        session: { type: 'string', description: 'Your session id (e.g. Claude Code session id). Only decides who gets approved requests first; it does not add an OK button.' },
+        scope: { type: 'string', description: 'Where this work lives, e.g. repo folder plus template name. After 10 minutes unclaimed requests go only to agents with the same scope.' },
       },
       required: ['title'],
     },
@@ -293,7 +325,9 @@ const TOOLS = [
     title: 'Change subtasks',
     description:
       "Change a task's checklist (subtasks) in one call: add, tick off (cross out), untick, rename, move or delete items, or clear the finished ones. " +
-      'Point at a subtask by its number in list_tasks (1 = first), or by its text (exact, or a unique part of it). Actions run in order, and numbers refer to the list as it is when that action runs.',
+      'Point at a subtask by its number in list_tasks (1 = first), or by its text (exact, or a unique part of it). Actions run in order, and numbers refer to the list as it is when that action runs. ' +
+      'set_approval puts an OK button on a subtask (or removes it with approval null). Set it only when (a) one specific action is proposed, (b) an agent can do all of it, (c) nothing else blocks it, (d) it is a real ask, not a status or tracking item; ' +
+      'never for steps only the user can do (downloads to their computer, passphrases, closing tabs, wp-admin logins).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -306,13 +340,14 @@ const TOOLS = [
             properties: {
               op: {
                 type: 'string',
-                enum: ['add', 'done', 'undone', 'rename', 'delete', 'move', 'done_all', 'undone_all', 'clear_done', 'delete_all'],
+                enum: ['add', 'done', 'undone', 'rename', 'delete', 'move', 'set_approval', 'done_all', 'undone_all', 'clear_done', 'delete_all'],
                 description:
-                  'add: new item (title, optional position). done / undone: tick or untick one. rename: new title. delete: remove one. move: to position. done_all / undone_all: every item. clear_done: delete ticked items. delete_all: empty the checklist.',
+                  'add: new item (title, optional position and approval). done / undone: tick or untick one. rename: new title. delete: remove one. move: to position. set_approval: set or clear (null) its approval. done_all / undone_all: every item. clear_done: delete ticked items. delete_all: empty the checklist.',
               },
               subtask: { type: ['string', 'number'], description: 'Which subtask: its number (1-based) or its text. Not needed for add or the *_all / clear_done ops.' },
               title: { type: 'string', description: 'For add and rename.' },
               position: { type: 'number', description: 'For add (where to insert) and move (where to put it); 1 = top. Add defaults to the end.' },
+              approval: APPROVAL_SCHEMA,
             },
             required: ['op'],
           },
@@ -408,66 +443,107 @@ function dayStart(ms: number, tz: string): number {
 
 /** Approved tasks go to the agent that created them first, then to anyone. */
 const FALLBACK_MS = 10 * 60_000;
-/** A claim with no finish after this long is treated as abandoned. */
-const CLAIM_STALE_MS = 2 * 60 * 60_000;
-type Req = { status: 'approved' | 'claimed' | 'done'; at: number; by: string | null; session: string | null; note: string | null; reply?: string | null };
 /** What the user said when sending the task: their own answer, or a plain OK. */
 const answerOf = (r: Req) => r.reply ?? 'OK (go ahead as planned)';
 const sessionArg = (a: Record<string, unknown>) => (typeof a.session === 'string' && a.session.trim() ? a.session.trim().slice(0, 120) : null);
+const scopeArg = (a: Record<string, unknown>) => (typeof a.scope === 'string' && a.scope.trim() ? a.scope.trim().slice(0, 200) : null);
+type Src = { agent: string; session: string | null; scope?: string | null };
+
+function approvalArg(v: unknown): Approval | null {
+  try {
+    return cleanApproval(v);
+  } catch (e) {
+    throw new ToolError(e instanceof BadRequest ? e.message : 'bad approval');
+  }
+}
+
+/** Finds the request an id points at: a task, one of its subtasks, or (old agents) a task with exactly one open subtask request. */
+async function findRequest(ctx: Ctx, id: unknown): Promise<ReqRef> {
+  const key = str(id, 'id', true)!;
+  const tasks = await list(ctx, 'task');
+  for (const t of tasks) {
+    const hit = reqs(t).find(r => r.sub?.id === key);
+    if (hit) return hit;
+  }
+  const t = await findTask(ctx, key);
+  const own = t.aiRequest as Req | null | undefined;
+  if (isOpen(own)) return { task: reqs(t)[0].task, sub: null, req: own };
+  const open = reqs(t).filter(r => r.sub && isOpen(r.req));
+  if (open.length === 1) return open[0];
+  if (open.length > 1) throw new ToolError(`That task has ${open.length} open requests; pass the \`request\` id from list_requests.`);
+  return { task: reqs(t)[0].task, sub: null, req: own };
+}
+const reqs = (t: Rec) => requestsOf(t as Parameters<typeof requestsOf>[0]);
 
 async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Promise<unknown> {
   const now = Date.now();
   switch (name) {
     case 'list_requests': {
       const session = sessionArg(a);
+      const scope = scopeArg(a);
       const cats = await catMap(ctx);
       const mine = (t: Rec) => {
-        const src = t.source as { agent: string; session: string | null } | null | undefined;
+        const src = t.source as Src | null | undefined;
         if (!src) return false;
         return session && src.session ? src.session === session : src.agent === ctx.agent;
       };
+      // After 10 minutes: other agents, but never across scopes.
+      // Unscoped (older) tasks keep the old rule: anyone after 10 minutes.
+      const sameScope = (t: Rec) => {
+        const s = (t.source as Src | null | undefined)?.scope ?? null;
+        return s == null || s === scope;
+      };
       const out = (await list(ctx, 'task'))
-        .filter(t => {
-          const r = t.aiRequest as Req | null | undefined;
-          if (!r || t.completedAt != null) return false;
-          const open = r.status === 'approved' || (r.status === 'claimed' && now - r.at > CLAIM_STALE_MS);
+        .filter(t => t.completedAt == null)
+        .flatMap(t => reqs(t))
+        .filter(({ task, sub, req }) => {
+          if (!req || (sub && sub.done)) return false;
+          const open = req.status === 'approved' || (req.status === 'claimed' && now - req.at > CLAIM_STALE_MS);
           if (!open) return false;
-          if (mine(t)) return true;
-          return !a.mine_only && now - r.at > FALLBACK_MS;
+          if (mine(task)) return true;
+          return !a.mine_only && now - req.at > FALLBACK_MS && sameScope(task);
         })
-        .sort((x, y) => Number(mine(y)) - Number(mine(x)) || (x.aiRequest as Req).at - (y.aiRequest as Req).at)
-        .map(t => ({ ...view(t, cats, ctx.tz), approved: fmtLocal((t.aiRequest as Req).at, ctx.tz), userAnswer: answerOf(t.aiRequest as Req), yours: mine(t) }));
-      return { total: out.length, requests: out, hint: out.length ? 'claim_request before starting each one.' : 'Nothing approved right now.' };
+        .sort((x, y) => Number(mine(y.task)) - Number(mine(x.task)) || x.req!.at - y.req!.at)
+        .map(({ task, sub, req }) => {
+          const approval = (sub ? sub.approval : (task.approval as Approval | null | undefined)) ?? null;
+          return {
+            request: sub ? sub.id : task.id,
+            ...(sub ? { subtask: sub.title, task: view(task, cats, ctx.tz) } : view(task, cats, ctx.tz)),
+            ...(approval ? { action: approval.action } : {}),
+            approved: fmtLocal(req!.at, ctx.tz),
+            userAnswer: answerOf(req!),
+            yours: mine(task),
+          };
+        });
+      return { total: out.length, requests: out, hint: out.length ? 'claim_request with each `request` id before starting it.' : 'Nothing approved right now.' };
     }
 
     case 'claim_request': {
       need(ctx, 'edit');
-      const t = await findTask(ctx, a.id);
-      const r = t.aiRequest as Req | null | undefined;
-      if (!r || r.status === 'done') throw new ToolError('That task is not waiting for an agent.');
-      if (r.status === 'claimed' && now - r.at <= CLAIM_STALE_MS && r.by !== ctx.agent) throw new ToolError(`${r.by ?? 'Another agent'} is already working on it.`);
-      const aiRequest = { status: 'claimed', at: now, by: ctx.agent, session: sessionArg(a), note: null, reply: r.reply ?? null };
-      await push(ctx, [{ kind: 'task', id: t.id, op: 'upsert', data: { aiRequest, updatedAt: now } }]);
-      return { claimed: view(t, await catMap(ctx), ctx.tz), userAnswer: answerOf(r), next: 'Follow the user\'s answer for this task, then call finish_request with a short result.' };
+      const ref = await findRequest(ctx, a.id);
+      const src = ref.task.source as Src | null | undefined;
+      const scope = scopeArg(a);
+      if (scope && src?.scope && src.scope !== scope) throw new ToolError(`That request belongs to another scope (${src.scope}).`);
+      const r = await ctx.hub.claim(ref.task.id, ref.sub?.id ?? null, ctx.agent, sessionArg(a));
+      if ('error' in r) throw new ToolError(r.error);
+      const approval = (ref.sub ? ref.sub.approval : (ref.task.approval as Approval | null | undefined)) ?? null;
+      return {
+        claimed: ref.sub ? { request: ref.sub.id, subtask: ref.sub.title, task: view(ref.task, await catMap(ctx), ctx.tz) } : { request: ref.task.id, ...view(ref.task, await catMap(ctx), ctx.tz) },
+        ...(approval ? { action: approval.action } : {}),
+        userAnswer: answerOf(r.req),
+        next: "Follow the user's answer for this request, then call finish_request with a short result.",
+      };
     }
 
     case 'finish_request': {
       need(ctx, 'edit');
-      const t = await findTask(ctx, a.id);
-      const r = t.aiRequest as Req | null | undefined;
-      if (!r) throw new ToolError('That task was not sent to AI.');
-      const result = str(a.result, 'result', true)!;
+      const ref = await findRequest(ctx, a.id);
+      const result = str(a.result, 'result', true)!.slice(0, 2000);
       const done = a.done !== false;
       if (done) need(ctx, 'complete');
-      const data: Record<string, unknown> = {
-        aiRequest: { status: done ? 'done' : 'approved', at: now, by: ctx.agent, session: r.session, note: result, reply: r.reply ?? null },
-        updatedAt: now,
-      };
-      if (done) data.completedAt = now;
-      else data.aiRequest = null; // handed back to the user; they can press OK again
-      if (!done) data.notes = [t.notes, `AI (${ctx.agent}): ${result}`].filter(Boolean).join('\n\n');
-      await push(ctx, [{ kind: 'task', id: t.id, op: 'upsert', data }]);
-      return { finished: done, task: t.title };
+      const r = await ctx.hub.finish(ref.task.id, ref.sub?.id ?? null, ctx.agent, result, done);
+      if ('error' in r) throw new ToolError(r.error);
+      return { finished: done, request: ref.sub?.id ?? ref.task.id, item: ref.sub?.title ?? ref.task.title, taskCompleted: r.taskDone };
     }
 
     case 'list_tasks': {
@@ -518,15 +594,23 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
     case 'add_task': {
       need(ctx, 'add');
       const title = str(a.title, 'title', true)!;
-      const data: Record<string, unknown> = { title, order: now, createdAt: now, updatedAt: now, source: { agent: ctx.agent, session: sessionArg(a) } };
+      const scope = scopeArg(a);
+      const data: Record<string, unknown> = { title, order: now, createdAt: now, updatedAt: now, source: { agent: ctx.agent, session: sessionArg(a), ...(scope ? { scope } : {}) } };
+      if (a.approval != null) data.approval = approvalArg(a.approval);
       if (a.notes != null) data.notes = str(a.notes, 'notes');
       if (a.due !== undefined) data.dueAt = parseDue(a.due, ctx.tz);
       if (a.priority !== undefined) data.priority = priority(a.priority);
       if (a.category != null) data.categoryId = await categoryId(ctx, a.category, true);
       if (Array.isArray(a.subtasks)) {
         data.subtasks = a.subtasks
-          .filter(s => typeof s === 'string' && s.trim())
-          .map(s => ({ id: crypto.randomUUID(), title: (s as string).trim(), done: false }));
+          .map(s => (typeof s === 'string' ? { title: s } : (s as Record<string, unknown>)))
+          .filter(s => typeof s?.title === 'string' && s.title.trim())
+          .map(s => ({
+            id: crypto.randomUUID(),
+            title: (s.title as string).trim().slice(0, 300),
+            done: false,
+            ...(s.approval != null ? { approval: approvalArg(s.approval) } : {}),
+          }));
       }
       const id = crypto.randomUUID();
       await push(ctx, [{ kind: 'task', id, op: 'upsert', data }]);
@@ -553,7 +637,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
       const t = await findTask(ctx, a.id);
       if (!Array.isArray(a.actions) || a.actions.length === 0) throw new ToolError('actions must be a non-empty array');
       if (a.actions.length > 100) throw new ToolError('At most 100 actions per call');
-      type Sub = { id: string; title: string; done: boolean };
+      type Sub = { id: string; title: string; done: boolean; approval?: Approval | null; aiRequest?: Req | null };
       let subs: Sub[] = ((t.subtasks as Sub[]) ?? []).map(x => ({ ...x }));
       const pick = (ref: unknown): number => {
         if (ref === undefined || ref === null || ref === '') throw new ToolError('Say which subtask (its number or text).');
@@ -582,7 +666,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
           case 'add': {
             need(ctx, 'edit');
             if (subs.length >= 100) throw new ToolError('A task can have at most 100 subtasks.');
-            const item = { id: crypto.randomUUID(), title: title(raw.title), done: false };
+            const item: Sub = { id: crypto.randomUUID(), title: title(raw.title), done: false, ...(raw.approval != null ? { approval: approvalArg(raw.approval) } : {}) };
             subs.splice(raw.position === undefined ? subs.length : pos(raw.position, subs.length), 0, item);
             done.push(`added "${item.title}"`);
             break;
@@ -618,6 +702,14 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
             done.push(`moved "${item.title}" to ${subs.indexOf(item) + 1}`);
             break;
           }
+          case 'set_approval': {
+            need(ctx, 'edit');
+            const i = pick(raw.subtask);
+            if (raw.approval === undefined) throw new ToolError('set_approval needs approval (an object, or null to remove it).');
+            subs[i] = { ...subs[i], approval: approvalArg(raw.approval) };
+            done.push(subs[i].approval ? `asked for OK on "${subs[i].title}"` : `removed the OK button from "${subs[i].title}"`);
+            break;
+          }
           case 'done_all':
           case 'undone_all':
             need(ctx, 'complete');
@@ -637,7 +729,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
             subs = [];
             break;
           default:
-            throw new ToolError(`Unknown op "${op}". Use add, done, undone, rename, delete, move, done_all, undone_all, clear_done or delete_all.`);
+            throw new ToolError(`Unknown op "${op}". Use add, done, undone, rename, delete, move, set_approval, done_all, undone_all, clear_done or delete_all.`);
         }
       }
       await push(ctx, [{ kind: 'task', id: t.id, op: 'upsert', data: { subtasks: subs, updatedAt: now } }]);
@@ -780,8 +872,9 @@ async function handle(ctx: Ctx, msg: RpcMsg): Promise<object | null> {
           'Call list_tasks before editing so you use real ids. Only delete when explicitly asked; prefer complete_task for "done". ' +
           'Use notify to ping the user on their desktop when they asked to be told about something. ' +
           'Prefer archive over delete when something just needs to be out of the way. ' +
-          'Pass your session id as `session` to add_task so tasks you create can be sent back to you. ' +
-          'The user can send a task back to AI with a plain OK or their own written answer (userAnswer, tied to that task): check list_requests when you start and periodically (e.g. `/loop 5m check Smart Tasks for approved tasks`), ' +
+          'Pass your session id as `session` (and a `scope`, e.g. repo folder plus template) to add_task so requests come back to you. ' +
+          'To ask the user to OK something you can do, set `approval` on that subtask; only those items get an OK button. Never for steps only the user can do. ' +
+          'When the user OKs (plain, a choice, or their own answer, as userAnswer), it shows in list_requests: check it when you start and periodically (e.g. `/loop 5m check Smart Tasks for approved tasks`), ' +
           'claim_request before working, and finish_request with a short result when done. ' +
           `The user controls what agents may do; right now: ${Object.entries(ctx.perms).map(([k, v]) => `${k} ${v ? 'on' : 'off'}`).join(', ')}.`,
       });

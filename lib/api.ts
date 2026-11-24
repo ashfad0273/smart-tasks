@@ -95,6 +95,8 @@ export interface AgentNotice {
   createdAt: number;
   /** Name of the agent key that sent it. */
   from?: string | null;
+  /** Text for the notification's "Copy prompt" button (unclaimed AI requests). */
+  copy?: string;
 }
 
 export interface InboxItem extends AgentNotice {

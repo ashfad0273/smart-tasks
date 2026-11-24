@@ -4,7 +4,7 @@ import { cx, formatDue, formatStamp, PRIORITY_META } from '../../../lib/utils';
 import type { Task } from '../../../lib/types';
 import { useApp } from '../state/AppContext';
 import Burst from './Burst';
-import { AiChip, canSendToAi } from './AiRequest';
+import { AiChip, hasAiState } from './AiRequest';
 
 /** dataTransfer type for dragged task ids (JSON array). */
 export const TASK_DRAG_TYPE = 'application/x-smart-tasks';
@@ -15,7 +15,7 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
   // Inside a category's own filter the chip says nothing new, so it folds away there.
   const showCat = !!cat && app.filter !== task.categoryId;
   const done = !!task.completedAt;
-  const ai = canSendToAi(task) || !!task.aiRequest;
+  const ai = hasAiState(task);
   const hasMeta = showCat || !!task.dueAt || !!task.url || done || ai;
   const due = task.dueAt ? formatDue(task.dueAt) : null;
   const doneSubs = task.subtasks.filter(s => s.done).length;

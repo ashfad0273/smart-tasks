@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { BadRequest, bitsToPerms, categoryDefaults, DEFAULT_AGENT_PERMS, LIMITS, permsToBits, taskDefaults, type AgentPerms, type Change, type SyncOp } from './model';
+import { BadRequest, bitsToPerms, categoryDefaults, CLAIM_STALE_MS, DEFAULT_AGENT_PERMS, isOpen, LIMITS, mergeTask, permsToBits, taskDefaults, type AgentPerms, type Approval, type Change, type Req, type SyncOp } from './model';
 
 /**
  * One instance per user. Holds the user's tasks + categories in its private
@@ -10,6 +10,22 @@ import { BadRequest, bitsToPerms, categoryDefaults, DEFAULT_AGENT_PERMS, LIMITS,
  * `changes since <rev>` — simple, gap-free, and offline-friendly.
  */
 const NOTICE_HOURLY_LIMIT = 30;
+/** A sent request nobody has claimed after this long gets a desktop notification. */
+export const UNCLAIMED_MS = 5 * 60_000;
+
+type Sub = { id: string; title: string; done: boolean; approval?: Approval | null; aiRequest?: Req | null };
+type TaskRec = Record<string, unknown> & { id: string; title?: string; subtasks?: Sub[]; aiRequest?: Req | null; completedAt?: number | null };
+/** One request: on the task itself, or on one of its subtasks. */
+export interface ReqRef {
+  task: TaskRec;
+  sub: Sub | null;
+  req: Req | null | undefined;
+}
+/** Every request a task carries (the task's own first, then its subtasks'). */
+export const requestsOf = (t: TaskRec): ReqRef[] => [
+  { task: t, sub: null, req: t.aiRequest },
+  ...(t.subtasks ?? []).map(s => ({ task: t, sub: s, req: s.aiRequest })),
+];
 
 export type Actor = 'me' | 'agent';
 export type ActivityType = 'added' | 'completed' | 'reopened' | 'deleted' | 'archived' | 'restored' | 'notice';
@@ -55,6 +71,10 @@ export class UserHub extends DurableObject<Env> {
     const cols = (t: string) => new Set(this.sql.exec<{ name: string }>(`PRAGMA table_info(${t})`).toArray().map(r => r.name));
     if (!cols('activity').has('who')) this.sql.exec(`ALTER TABLE activity ADD COLUMN who TEXT`);
     if (!cols('notices').has('sender')) this.sql.exec(`ALTER TABLE notices ADD COLUMN sender TEXT`);
+    // Text the notification's "Copy prompt" button copies.
+    if (!cols('notices').has('copy')) this.sql.exec(`ALTER TABLE notices ADD COLUMN copy TEXT`);
+    // Requests already reported as unclaimed (by request id), so each is reported once.
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS nudged (rid TEXT PRIMARY KEY, at INTEGER NOT NULL)`);
     this.backfillActivity();
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
@@ -165,6 +185,7 @@ export class UserHub extends DurableObject<Env> {
     this.who = who;
     let rev = this.rev();
     const now = Date.now();
+    let nudgeAt = Infinity;
 
     this.ctx.storage.transactionSync(() => {
       const write = (kind: string, id: string, data: Record<string, unknown> | null) => {
@@ -214,8 +235,15 @@ export class UserHub extends DurableObject<Env> {
           if (count >= LIMITS.itemsPerKind) throw new BadRequest(`Limit of ${LIMITS.itemsPerKind} ${op.kind}s reached`);
           base = op.kind === 'task' ? taskDefaults(now) : categoryDefaults(now);
         }
-        const next = { ...base, ...op.data };
+        const next = op.kind === 'task' ? mergeTask(base, op.data ?? {}, now) : { ...base, ...op.data };
         write(op.kind, op.id, next);
+        if (op.kind === 'task') {
+          // Newly sent requests: check back in 5 minutes whether an agent took them.
+          const before = new Set(requestsOf(base as TaskRec).map(r => r.req?.id).filter(Boolean));
+          for (const r of requestsOf(next as TaskRec)) {
+            if (r.req?.status === 'approved' && r.req.id && !before.has(r.req.id)) nudgeAt = Math.min(nudgeAt, r.req.at + UNCLAIMED_MS);
+          }
+        }
         if (op.kind === 'task') {
           const title = String(next.title ?? '');
           const was = existing ? base.completedAt : null;
@@ -238,7 +266,110 @@ export class UserHub extends DurableObject<Env> {
     });
 
     this.broadcast(rev);
+    if (nudgeAt !== Infinity) void this.armNudge(nudgeAt);
     return { rev };
+  }
+
+  /* ── AI requests ─────────────────────────────────────────────────── */
+
+  private task(id: string): TaskRec | null {
+    const row = this.sql.exec<{ data: string }>(`SELECT data FROM items WHERE kind = 'task' AND id = ? AND deleted = 0`, id).toArray()[0];
+    return row ? { ...(JSON.parse(row.data) as Record<string, unknown>), id } : null;
+  }
+
+  /** Writes a new request state onto the task or one subtask (plus extra task fields). */
+  private setRequest(t: TaskRec, subId: string | null, req: Req | null, who: string, extra: Record<string, unknown> = {}, subPatch: Partial<Sub> = {}): void {
+    const now = Date.now();
+    const data: Record<string, unknown> = { updatedAt: now, ...extra };
+    if (subId) data.subtasks = (t.subtasks ?? []).map(s => (s.id === subId ? { ...s, ...subPatch, aiRequest: req } : s));
+    else data.aiRequest = req;
+    this.push([{ kind: 'task', id: t.id, op: 'upsert', data }], 'agent', who);
+  }
+
+  /**
+   * Claim a request. Runs in one go inside this object (no awaits), so two agents
+   * claiming at once can't both win: the second is told who has it.
+   */
+  claim(taskId: string, subId: string | null, who: string, session: string | null): { ok: true; req: Req } | { error: string } {
+    const t = this.task(taskId);
+    const sub = subId ? (t?.subtasks ?? []).find(s => s.id === subId) : null;
+    if (!t || (subId && !sub)) return { error: 'That request no longer exists.' };
+    const r: Req | null | undefined = subId ? sub!.aiRequest : t.aiRequest;
+    if (!isOpen(r)) return { error: (r as Req | null | undefined)?.status === 'done' ? 'That request is already done.' : 'That item is not waiting for an agent.' };
+    const now = Date.now();
+    if (r.status === 'claimed' && now - r.at <= CLAIM_STALE_MS) {
+      const same = session ? r.session === session : !r.session && r.by === who;
+      if (!same) return { error: `already claimed by ${r.session ?? r.by ?? 'another agent'}` };
+    }
+    const req: Req = { ...(r.id ? { id: r.id } : {}), status: 'claimed', at: now, by: who, session, note: null, reply: r.reply ?? null };
+    this.setRequest(t, subId, req, who);
+    return { ok: true, req };
+  }
+
+  /**
+   * Finish a claimed request. done: tick the subtask (and finish the task once every
+   * subtask is done). Not done: hand it back to the user with the reason.
+   */
+  finish(taskId: string, subId: string | null, who: string, result: string, done: boolean): { ok: true; taskDone: boolean } | { error: string } {
+    const t = this.task(taskId);
+    const sub = subId ? (t?.subtasks ?? []).find(s => s.id === subId) : null;
+    if (!t || (subId && !sub)) return { error: 'That request no longer exists.' };
+    const r = subId ? sub!.aiRequest : t.aiRequest;
+    if (!r || r.status === 'cancelled') return { error: r ? 'The user took that request back.' : 'That item was not sent to AI.' };
+    if (r.status === 'done' || r.status === 'returned') return { error: 'That request is already finished.' };
+    const now = Date.now();
+    const req: Req = { ...(r.id ? { id: r.id } : {}), status: done ? 'done' : 'returned', at: now, by: who, session: r.session, note: result, reply: r.reply ?? null };
+    let taskDone = false;
+    const extra: Record<string, unknown> = {};
+    if (done && !subId) {
+      extra.completedAt = now;
+      taskDone = true;
+    } else if (done && subId) {
+      const subs = t.subtasks ?? [];
+      taskDone = subs.every(s => s.id === subId || s.done);
+      if (taskDone && t.completedAt == null) extra.completedAt = now;
+    }
+    this.setRequest(t, subId, req, who, extra, done && subId ? { done: true } : {});
+    return { ok: true, taskDone };
+  }
+
+  /** Wake up at `at` (or earlier, if a check is already due sooner). */
+  private async armNudge(at: number): Promise<void> {
+    const cur = await this.ctx.storage.getAlarm();
+    if (cur == null || at < cur) await this.ctx.storage.setAlarm(at);
+  }
+
+  /** Requests nobody claimed within 5 minutes: one desktop notification each. */
+  async alarm(): Promise<void> {
+    const now = Date.now();
+    const done = new Set(this.sql.exec<{ rid: string }>(`SELECT rid FROM nudged`).toArray().map(r => r.rid));
+    let next = Infinity;
+    let sent = false;
+    for (const t of this.list('task') as TaskRec[]) {
+      if (t.completedAt != null || t.archivedAt != null) continue;
+      for (const { sub, req } of requestsOf(t)) {
+        if (req?.status !== 'approved' || !req.id || done.has(req.id) || (sub && sub.done)) continue;
+        const due = req.at + UNCLAIMED_MS;
+        if (due > now) {
+          next = Math.min(next, due);
+          continue;
+        }
+        const name = String(sub ? sub.title : t.title).slice(0, 200);
+        const id = sub ? sub.id : t.id;
+        this.sql.exec(
+          `INSERT INTO notices (title, message, url, created_at, sender, copy) VALUES (?, ?, NULL, ?, 'Smart Tasks', ?)`,
+          `No agent picked up ${name}`.slice(0, 60),
+          `Nothing claimed it in 5 minutes. Copy the prompt and paste it into your agent: "${name.slice(0, 80)}"`.slice(0, 240),
+          now,
+          `Check Smart Tasks: run list_requests, claim and do request ${id}`,
+        );
+        this.sql.exec(`INSERT INTO nudged (rid, at) VALUES (?, ?) ON CONFLICT (rid) DO NOTHING`, req.id, now);
+        sent = true;
+      }
+    }
+    this.sql.exec(`DELETE FROM nudged WHERE at < ?`, now - 30 * 86_400_000);
+    if (sent) this.ping({ type: 'notice' });
+    if (next !== Infinity) await this.ctx.storage.setAlarm(next);
   }
 
   /** Last 30 days: how many changes there were, and how many each named agent made. */
@@ -300,31 +431,24 @@ export class UserHub extends DurableObject<Env> {
     this.sql.exec(`DELETE FROM notices WHERE created_at < ?`, now - 7 * 86_400_000);
     this.who = who;
     this.log(now, 'notice', null, n.title, 'agent', n.message);
-    const msg = JSON.stringify({ type: 'notice' });
-    for (const ws of this.ctx.getWebSockets()) {
-      try {
-        ws.send(msg);
-      } catch {
-        /* socket closing */
-      }
-    }
+    this.ping({ type: 'notice' });
     return { id };
   }
 
   /** Notifications newer than `after` (a notice id) from the last day. */
   notices(after: number): {
     latest: number;
-    notices: Array<{ id: number; title: string; message: string; url: string | null; createdAt: number; from: string | null }>;
+    notices: Array<{ id: number; title: string; message: string; url: string | null; createdAt: number; from: string | null; copy?: string }>;
   } {
     const latest = this.sql.exec<{ v: number | null }>(`SELECT MAX(id) AS v FROM notices`).one().v ?? 0;
     const notices = this.sql
-      .exec<{ id: number; title: string; message: string; url: string | null; created_at: number; sender: string | null }>(
-        `SELECT id, title, message, url, created_at, sender FROM notices WHERE id > ? AND created_at > ? ORDER BY id LIMIT 20`,
+      .exec<{ id: number; title: string; message: string; url: string | null; created_at: number; sender: string | null; copy: string | null }>(
+        `SELECT id, title, message, url, created_at, sender, copy FROM notices WHERE id > ? AND created_at > ? ORDER BY id LIMIT 20`,
         after,
         Date.now() - 86_400_000,
       )
       .toArray()
-      .map(r => ({ id: r.id, title: r.title, message: r.message, url: r.url, createdAt: r.created_at, from: r.sender }));
+      .map(r => ({ id: r.id, title: r.title, message: r.message, url: r.url, createdAt: r.created_at, from: r.sender, ...(r.copy ? { copy: r.copy } : {}) }));
     return { latest, notices };
   }
 
@@ -363,7 +487,11 @@ export class UserHub extends DurableObject<Env> {
   /* ── WebSocket fan-out ───────────────────────────────────────────── */
 
   private broadcast(rev: number): void {
-    const msg = JSON.stringify({ type: 'rev', rev });
+    this.ping({ type: 'rev', rev });
+  }
+
+  private ping(m: object): void {
+    const msg = JSON.stringify(m);
     for (const ws of this.ctx.getWebSockets()) {
       try {
         ws.send(msg);

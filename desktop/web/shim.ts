@@ -250,7 +250,7 @@ g.chrome = {
   tabs: { create: ({ url }: { url: string }) => openUrl(url) },
   offscreen: {
     createDocument: () => sendMessage({ type: 'st-offscreen-chime' }),
-    Reason: { AUDIO_PLAYBACK: 'AUDIO_PLAYBACK' },
+    Reason: { AUDIO_PLAYBACK: 'AUDIO_PLAYBACK', CLIPBOARD: 'CLIPBOARD' },
   },
   // Google sign-in happens in the default browser, which comes back to the
   // app's loopback port (Rust: google_auth + presence.rs).

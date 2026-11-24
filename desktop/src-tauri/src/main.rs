@@ -178,6 +178,32 @@ fn notify(
     toast::show(&app, toast::Toast { id, title, message, context, buttons, sticky, silent })
 }
 
+/// Plain text to the system clipboard (the "Copy prompt" notification button).
+/// The webview can't write the clipboard while the window is hidden, so the OS tool does it.
+#[tauri::command]
+fn copy_text(text: String) -> Result<(), String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    #[cfg(target_os = "macos")]
+    let mut cmd = Command::new("pbcopy");
+    #[cfg(windows)]
+    let mut cmd = {
+        use std::os::windows::process::CommandExt;
+        let mut c = Command::new("clip");
+        c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: no console flash
+        c
+    };
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let mut cmd = Command::new("xclip");
+    #[cfg(not(any(target_os = "macos", windows)))]
+    cmd.args(["-selection", "clipboard"]);
+    let mut child = cmd.stdin(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
+    // clip.exe reads UTF-16 when the text starts with a BOM; plain ASCII prompts need nothing special.
+    child.stdin.take().ok_or("no stdin")?.write_all(text.as_bytes()).map_err(|e| e.to_string())?;
+    child.wait().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Badge from the web side: tray icon and taskbar overlay already drawn as
 /// 32×32 RGBA (Windows), and the plain count for the Dock (macOS).
 #[tauri::command]
@@ -299,6 +325,7 @@ fn main() {
             show_window,
             open_url,
             notify,
+            copy_text,
             set_badge,
             set_presence,
             google_auth,

@@ -2,6 +2,26 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## 1.8.0 - 2026-11-24
+
+### Added
+- **Clearer "OK, send to AI".** The button now appears only on steps an agent marked as something it can do, and says what will happen ("OK: delete 9 items and repackage"; the full text on hover or with the arrow). It sits on subtasks; a task shows it only when it has no subtasks. Tasks an agent made without asking you for anything no longer show it.
+- **Choices and confirmations.** For decisions you get one button per choice. Irreversible actions (delete, upload, replace, send) ask once more before they go. You can always write your own answer instead.
+- **Progress on every step.** Sent to AI · waiting (with Cancel until an agent picks it up), Working · who · when, and Done with the agent's note. The step is ticked, and the task completes when every step is done (adding a new step reopens it). If the agent hands a step back, you see its reason and can answer it.
+- **Nobody picked it up?** If no agent claims a request within 5 minutes you get a notification with a Copy prompt button to paste into any agent.
+- **Teach your AI in one click.** AI agents, Connect your AI has a Copy prompt button with everything an agent needs to know about Smart Tasks and the OK flow.
+- **Drag to select.** Drag a box over tasks from empty space in the list to select them, like in a file manager. Shift, Cmd or Ctrl adds to the selection.
+- The desktop app checks for updates when you come back to it and every 30 minutes.
+
+### Changed
+- For agents: add_task and update_subtasks take an `approval` (action, choices, confirm) and a `scope`. Requests go to the session that made the task first, and after 10 minutes only to agents in the same scope. Pressing OK twice never makes two requests, and a second agent trying to claim one is told who has it.
+- The subtasks list in the task editor is a tidier card with a progress ring.
+- The task editor's Delete, Archive and Duplicate buttons are one matching group next to Done.
+
+### Fixed
+- In the desktop app, the list header no longer runs under the task panel on narrower windows.
+- The account menu opens next to your profile in the sidebar.
+
 ## 1.7.0 - 2026-11-24
 
 ### Added

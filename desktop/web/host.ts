@@ -173,6 +173,12 @@ async function checkUpdate(): Promise<void> {
 /* ── start ──────────────────────────────────────────────────────────────── */
 
 export function startHost() {
+  // "Copy prompt" on a notification: the system clipboard, even while the window is hidden.
+  chrome.runtime.onMessage.addListener((msg: { type?: string; text?: unknown }) => {
+    if (msg?.type === 'st-offscreen-copy' && typeof msg.text === 'string' && inTauri) void invoke('copy_text', { text: msg.text }).catch(() => {});
+    return false;
+  });
+
   document.documentElement.classList.add('desktop');
 
   badge.onChange = () => void renderBadge();

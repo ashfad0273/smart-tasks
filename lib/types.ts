@@ -5,6 +5,20 @@ export interface Subtask {
   id: string;
   title: string;
   done: boolean;
+  /** Set by an agent when this step is one specific thing it can do once you OK it. */
+  approval?: Approval | null;
+  /** This step's hand-off to an agent (one open request at a time). */
+  aiRequest?: AiRequest | null;
+}
+
+/** What an agent proposes to do when you press OK. No approval = no button. */
+export interface Approval {
+  /** The exact thing the agent will do. */
+  action: string;
+  /** For decisions: one button per choice; the picked text is sent as your answer. */
+  choices?: string[];
+  /** Irreversible (delete, upload, replace, send): ask once more before sending. */
+  confirm?: boolean;
 }
 
 export interface Task {
@@ -24,6 +38,8 @@ export interface Task {
   subtasks: Subtask[];
   /** Set when an AI agent created the task: its key name and (if it said) its session id. */
   source?: TaskSource | null;
+  /** What an agent proposes for the task itself (used when it has no subtasks). */
+  approval?: Approval | null;
   /** "OK, send to AI" hand-off: approved by you, then claimed and finished by an agent. */
   aiRequest?: AiRequest | null;
   /** sort key (descending) */
@@ -35,10 +51,15 @@ export interface Task {
 export interface TaskSource {
   agent: string;
   session: string | null;
+  /** Where the work lives (e.g. repo folder + template); requests never cross scopes. */
+  scope?: string | null;
 }
 
 export interface AiRequest {
-  status: 'approved' | 'claimed' | 'done';
+  /** Unique per send; repeats of the same send are ignored by the server. Missing on old requests. */
+  id?: string;
+  /** approved = sent and waiting; returned = the agent handed it back (see note); cancelled = you took it back. */
+  status: 'approved' | 'claimed' | 'done' | 'returned' | 'cancelled';
   /** epoch ms of the last status change */
   at: number;
   /** agent key name that claimed or finished it */

@@ -19,7 +19,7 @@ import {
 import type { Priority, Subtask, Task } from '../../../lib/types';
 import { useApp } from '../state/AppContext';
 import Sheet from './Sheet';
-import { AiPanel, canSendToAi } from './AiRequest';
+import { AiAsk, AiPanel, newRequest, subShape, taskApproval } from './AiRequest';
 import DueEditor from './DueEditor';
 
 /** Small donut showing how many subtasks are done. */
@@ -177,6 +177,23 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
     if (task.dueAt !== prev.dueAt && dueAt === prev.dueAt) setDueAt(task.dueAt);
     const subs = JSON.stringify(task.subtasks);
     if (subs !== JSON.stringify(prev.subtasks) && JSON.stringify(subtasks) === JSON.stringify(prev.subtasks)) setSubtasks(task.subtasks.map(s => ({ ...s })));
+    else {
+      // Request progress (sent → claimed → done) always comes from the server, even while
+      // you have unsaved subtask edits; a finished request ticks its subtask.
+      const live = new Map(task.subtasks.map(s => [s.id, s]));
+      setSubtasks(list => {
+        let changed = false;
+        const next = list.map(s => {
+          const l = live.get(s.id);
+          if (!l) return s;
+          const tick = l.aiRequest?.status === 'done' && !s.done;
+          if (!tick && JSON.stringify([s.approval ?? null, s.aiRequest ?? null]) === JSON.stringify([l.approval ?? null, l.aiRequest ?? null])) return s;
+          changed = true;
+          return subShape({ ...s, approval: l.approval, aiRequest: l.aiRequest, done: tick || s.done });
+        });
+        return changed ? next : list;
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task]);
 
@@ -235,6 +252,12 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
     if (!t) return;
     setSubtasks(list => [...list, { id: uid4(), title: t.slice(0, 300), done: false }]);
     setNewSub('');
+  };
+  /** Send or cancel one subtask's request now (not on the autosave delay). */
+  const setSubRequest = (id: string, aiRequest: Subtask['aiRequest']) => {
+    const next = subtasks.map(s => (s.id === id ? subShape({ ...s, aiRequest }) : s));
+    setSubtasks(next);
+    void app.updateTask(task.id, task.completedAt ? { subtasks: next, completedAt: null } : { subtasks: next });
   };
   const toggleSub = (id: string) => setSubtasks(list => list.map(s => (s.id === id ? { ...s, done: !s.done } : s)));
   const removeSub = (id: string) => setSubtasks(list => list.filter(s => s.id !== id));
@@ -343,7 +366,7 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
             <span className="truncate">{task.url.replace(/^https?:\/\//, '')}</span>
           </a>
         )}
-        {(canSendToAi(task) || !!task.aiRequest) && <AiPanel task={task} />}
+        {((!task.completedAt && !!taskApproval(task)) || (!!task.aiRequest && task.aiRequest.status !== 'cancelled')) && <AiPanel task={task} />}
 
         <Section label="Category">
           <div className="flex flex-wrap gap-1.5">
@@ -455,7 +478,7 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
                 key={s.id}
                 data-sub-row
                 className={cx(
-                  'group/sub flex items-start gap-2 px-2 py-2 transition-colors hover:bg-white/[.025]',
+                  'group/sub flex flex-wrap items-start gap-x-2 px-2 py-2 transition-colors hover:bg-white/[.025]',
                   drag?.from === i && 'opacity-40',
                   drag && target === i && drag.from !== i && 'ring-1 ring-acc/60',
                 )}
@@ -520,6 +543,18 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
                 >
                   <X size={12} />
                 </button>
+                {editingSub !== s.id && (s.approval || s.aiRequest) && (
+                  <div className="w-full min-w-0 basis-full pl-[46px] pr-1">
+                    <AiAsk
+                      compact
+                      approval={s.approval}
+                      req={s.aiRequest}
+                      done={s.done}
+                      onSend={reply => setSubRequest(s.id, newRequest(reply))}
+                      onCancel={() => s.aiRequest && setSubRequest(s.id, { ...s.aiRequest, status: 'cancelled', at: Date.now() })}
+                    />
+                  </div>
+                )}
               </div>
             ))}
             </div>
