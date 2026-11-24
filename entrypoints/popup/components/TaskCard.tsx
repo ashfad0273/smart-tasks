@@ -5,6 +5,9 @@ import type { Task } from '../../../lib/types';
 import { useApp } from '../state/AppContext';
 import Burst from './Burst';
 
+/** dataTransfer type for dragged task ids (JSON array). */
+export const TASK_DRAG_TYPE = 'application/x-smart-tasks';
+
 export default function TaskCard({ task, index }: { task: Task; index: number }) {
   const app = useApp();
   const cat = app.categoryById(task.categoryId);
@@ -44,13 +47,52 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
   const prio = task.priority ? PRIORITY_META[task.priority] : null;
   const dueTone = !due || done ? '' : due.overdue ? 'bg-danger/15 text-[#fda4af]' : due.label.startsWith('Today') ? 'bg-sun/15 text-sun' : 'bg-surface2 text-mut';
 
+  const selected = app.selected.includes(task.id);
+  const selecting = app.selected.length > 0;
+
+  // File-manager style: Cmd/Ctrl-click toggles, Shift-click selects a range,
+  // and while anything is selected a plain click toggles too.
+  const onClickCapture = (e: React.MouseEvent) => {
+    if (renaming) return;
+    const multi = e.metaKey || e.ctrlKey;
+    if (!multi && !e.shiftKey && !selecting) return;
+    e.preventDefault();
+    e.stopPropagation();
+    app.selectTask(task.id, e.shiftKey ? 'range' : 'toggle');
+  };
+
+  const onDragStart = (e: React.DragEvent) => {
+    const ids = selected ? app.selected : [task.id];
+    e.dataTransfer.setData(TASK_DRAG_TYPE, JSON.stringify(ids));
+    e.dataTransfer.setData('text/plain', ids.length === 1 ? task.title : `${ids.length} tasks`);
+    e.dataTransfer.effectAllowed = 'move';
+    // A small "N tasks" chip under the cursor instead of a ghost of the whole card.
+    const chip = document.createElement('div');
+    chip.textContent = ids.length === 1 ? task.title.slice(0, 40) : `${ids.length} tasks`;
+    chip.style.cssText =
+      'position:fixed;top:-100px;left:0;padding:6px 12px;border-radius:999px;background:#3fd1c5;color:#0b1a1c;font:600 12px system-ui;white-space:nowrap';
+    document.body.appendChild(chip);
+    e.dataTransfer.setDragImage(chip, 14, 14);
+    setTimeout(() => chip.remove(), 0);
+    document.documentElement.dataset.dragging = 'tasks';
+  };
+
   return (
     <div
+      draggable={!renaming}
+      onDragStart={onDragStart}
+      onDragEnd={() => delete document.documentElement.dataset.dragging}
+      onClickCapture={onClickCapture}
+      onMouseDown={e => e.shiftKey && e.preventDefault() /* no text highlight on Shift-click */}
+      aria-selected={selecting ? selected : undefined}
       className={cx(
-        'anim-card group relative flex items-start gap-3 overflow-hidden border border-white/[.04] bg-white/[.015] px-4 py-3.5 transition-[background-color,border-radius] duration-300',
+        'anim-card group relative flex items-start gap-3 overflow-hidden border px-4 py-3.5 transition-[background-color,border-color,border-radius] duration-300',
         // Single-line cards (no chips row) get a tighter corner so they don't look like pills.
         hasMeta ? 'rounded-xl' : 'rounded-lg',
-        'hover:bg-white/[.03] focus-within:bg-white/[.03]',
+        selected
+          ? 'border-acc/60 bg-acc/[.11] shadow-[inset_0_0_0_1px_rgba(63,209,197,.25)]'
+          : 'border-white/[.04] bg-white/[.015] hover:bg-white/[.03] focus-within:bg-white/[.03]',
+        selecting && 'cursor-pointer',
       )}
       style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
     >
@@ -174,7 +216,12 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
         </div>
       </div>
 
-      <div className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-md bg-surface/95 opacity-0 shadow-[0_0_12px_8px_var(--color-surface)] transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+      <div
+        className={cx(
+          'pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-md bg-surface/95 opacity-0 shadow-[0_0_12px_8px_var(--color-surface)] transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100',
+          selecting && 'hidden', // the selection bar has the actions while selecting
+        )}
+      >
         <button
           aria-label={`Edit "${task.title}"`}
           onClick={() => app.openEdit(task.id)}

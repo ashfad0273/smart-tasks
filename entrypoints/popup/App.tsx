@@ -7,6 +7,7 @@ import AgentScreen from './screens/AgentScreen';
 import DevicesScreen from './screens/DevicesScreen';
 import ActivityScreen from './screens/ActivityScreen';
 import ArchiveScreen from './screens/ArchiveScreen';
+import NotificationsScreen from './screens/NotificationsScreen';
 import Signup from './screens/Signup';
 import Welcome from './screens/Welcome';
 import Onboarding from './screens/Onboarding';
@@ -38,6 +39,7 @@ function Screen() {
   if (app.screen === 'devices') return <DevicesScreen />;
   if (app.screen === 'activity') return <ActivityScreen />;
   if (app.screen === 'archive') return <ArchiveScreen />;
+  if (app.screen === 'notifications') return <NotificationsScreen />;
   return <Dashboard />;
 }
 

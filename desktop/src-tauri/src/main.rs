@@ -78,6 +78,9 @@ fn build_window(app: &AppHandle, visible: bool) -> tauri::Result<()> {
         .visible(visible)
         .background_color(Color(16, 25, 28, 255))
         .additional_browser_args(BROWSER_ARGS)
+        // Tauri's file-drop handler swallows HTML5 drag and drop on Windows;
+        // the app drags tasks onto categories, and never takes dropped files.
+        .disable_drag_drop_handler()
         .build()?;
     // Closing hides to the tray: sync and reminders keep running. Quit lives in the tray menu.
     let handle = w.clone();

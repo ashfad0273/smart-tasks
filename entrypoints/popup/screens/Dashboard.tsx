@@ -5,6 +5,7 @@ import {
   Flame,
   FolderOpen,
   History,
+  Bell,
   Layers,
   ListPlus,
   Plus,
@@ -16,6 +17,10 @@ import {
   ArrowDownUp,
   Check,
   X,
+  Archive,
+  Trash2,
+  FolderInput,
+  CheckCheck,
 } from 'lucide-react';
 import { cx, startOfDay } from '../../../lib/utils';
 import { onStorageChange, storageGet, storageSet } from '../../../lib/ext';
@@ -26,23 +31,66 @@ import { useApp, type SortBy, type Tab } from '../state/AppContext';
 import Confetti from '../components/Confetti';
 import EmptyState from '../components/EmptyState';
 import SyncBadge from '../components/SyncBadge';
-import TaskCard from '../components/TaskCard';
+import TaskCard, { TASK_DRAG_TYPE } from '../components/TaskCard';
 import ScrollRow from '../components/ScrollRow';
 import QuickAdd from '../components/QuickAdd';
 import type { Task } from '../../../lib/types';
 
-function Pill({ active, onClick, children, color }: { active: boolean; onClick: () => void; children: React.ReactNode; color?: string }) {
+function Pill({
+  active,
+  onClick,
+  children,
+  color,
+  onDropTasks,
+  dropLabel,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  color?: string;
+  /** Makes the pill a drop target for dragged tasks. */
+  onDropTasks?: (ids: string[]) => void;
+  dropLabel?: string;
+}) {
+  const [over, setOver] = useState(false);
+  const accepts = (e: React.DragEvent) => !!onDropTasks && e.dataTransfer.types.includes(TASK_DRAG_TYPE);
+  const c = color ?? '#3fd1c5';
   return (
     <button
       onClick={onClick}
       aria-pressed={active}
+      title={dropLabel}
+      onDragEnter={e => accepts(e) && (e.preventDefault(), setOver(true))}
+      onDragOver={e => {
+        if (!accepts(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={e => {
+        setOver(false);
+        if (!accepts(e)) return;
+        e.preventDefault();
+        try {
+          const ids = JSON.parse(e.dataTransfer.getData(TASK_DRAG_TYPE));
+          if (Array.isArray(ids) && ids.length) onDropTasks!(ids.map(String));
+        } catch {
+          /* not ours */
+        }
+      }}
       className={cx(
-        'press flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold',
-        active ? '' : 'border-white/[.05] bg-black/15 text-mut hover:text-txt',
+        'press flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-[transform,box-shadow]',
+        active || over ? '' : 'border-white/[.05] bg-black/15 text-mut hover:text-txt',
+        over && 'scale-[1.06]',
       )}
       style={
-        active
-          ? { background: `${color ?? '#3fd1c5'}1f`, color: color ?? '#3fd1c5', borderColor: `${color ?? '#3fd1c5'}33` }
+        active || over
+          ? {
+              background: `${c}${over ? '33' : '1f'}`,
+              color: c,
+              borderColor: `${c}${over ? '99' : '33'}`,
+              boxShadow: over ? `0 0 0 3px ${c}26` : undefined,
+            }
           : undefined
       }
     >
@@ -171,8 +219,16 @@ export default function Dashboard() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || app.editTaskId || app.confirmData || adding) return;
-      if (e.key === 'n' || e.key === 'N') {
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || app.editTaskId || app.confirmData || adding) return;
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        app.setSelected(app.visibleTasks.map(x => x.id));
+      } else if (e.key === 'Escape' && app.selected.length) {
+        e.preventDefault();
+        app.clearSelection();
+      } else if (e.metaKey || e.ctrlKey || e.altKey) {
+        return;
+      } else if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
         setAdding(true);
       } else if (e.key === '/') {
@@ -183,7 +239,7 @@ export default function Dashboard() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [app.editTaskId, app.confirmData, adding]);
+  }, [app, adding]);
 
   // Unread AI notifications for the bell; a notification click can ask to land on Activity.
   const [unread, setUnread] = useState(0);
@@ -193,9 +249,9 @@ export default function Dashboard() {
     const read = async () => setUnread((await storageGet<InboxItem[]>(inboxKey(uid), [])).filter(i => !i.read).length);
     void read();
     void storageGet<string | null>(OPEN_SCREEN_KEY, null).then(s => {
-      if (s !== 'activity') return;
+      if (s !== 'notifications' && s !== 'activity') return;
       void storageSet(OPEN_SCREEN_KEY, null);
-      app.setScreen('activity');
+      app.setScreen('notifications');
     });
     return onStorageChange(keys => keys.includes(inboxKey(uid)) && void read());
   }, [uid, app]);
@@ -284,12 +340,20 @@ export default function Dashboard() {
           {/* Only surface sync when something needs attention. */}
           {(app.sync === 'offline' || app.sync === 'error') && <SyncBadge state={app.sync} onClick={app.syncNow} />}
           <button
-            aria-label={unread ? `Activity, ${unread} new notification${unread === 1 ? '' : 's'}` : 'Activity'}
-            title="Activity"
+            aria-label="History"
+            title="History"
             onClick={() => app.setScreen('activity')}
-            className="press relative rounded-full p-1.5 text-mut hover:bg-surface hover:text-txt"
+            className="press rounded-full p-1.5 text-mut hover:bg-surface hover:text-txt"
           >
             <History size={16} />
+          </button>
+          <button
+            aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'}
+            title="Notifications"
+            onClick={() => app.setScreen('notifications')}
+            className={cx('press relative rounded-full p-1.5 hover:bg-surface hover:text-txt', unread ? 'text-pop' : 'text-mut')}
+          >
+            <Bell size={16} />
             {unread > 0 && (
               <span className="anim-pop absolute -right-0.5 -top-0.5 grid h-[15px] min-w-[15px] place-items-center rounded-full bg-pop px-1 text-[9.5px] font-bold leading-none text-white shadow-[0_0_10px_rgba(157,123,250,.7)]">
                 {unread > 9 ? '9+' : unread}
@@ -344,11 +408,23 @@ export default function Dashboard() {
       <div className="mt-5 flex items-center">
       <div className="min-w-0 flex-1">
       <ScrollRow className="gap-2 px-6 py-0.5">
-        <Pill active={app.filter === 'all'} onClick={() => app.setFilter('all')}>
+        <Pill
+          active={app.filter === 'all'}
+          onClick={() => app.setFilter('all')}
+          onDropTasks={ids => void app.moveTasks(ids, null).then(app.clearSelection)}
+          dropLabel="Drop tasks here to remove their category"
+        >
           <Layers size={12} /> Everything
         </Pill>
         {app.categories.map(c => (
-          <Pill key={c.id} active={app.filter === c.id} color={c.color} onClick={() => app.setFilter(app.filter === c.id ? 'all' : c.id)}>
+          <Pill
+            key={c.id}
+            active={app.filter === c.id}
+            color={c.color}
+            onClick={() => app.setFilter(app.filter === c.id ? 'all' : c.id)}
+            onDropTasks={ids => void app.moveTasks(ids, c.id).then(app.clearSelection)}
+            dropLabel={`Drop tasks here to move them to ${c.name}`}
+          >
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: c.color }} />
             {c.name}
             {(app.countsByCategory[c.id] ?? 0) > 0 && <span className="opacity-70">{app.countsByCategory[c.id]}</span>}
@@ -526,7 +602,9 @@ export default function Dashboard() {
       </div>
 
       <QuickAdd open={adding} onClose={() => setAdding(false)} />
+      {app.selected.length > 0 && <SelectionBar />}
       <button
+        hidden={app.selected.length > 0}
         onClick={() => setAdding(a => !a)}
         aria-label={adding ? 'Close new task' : 'New task (N)'}
         title={adding ? 'Close' : 'New task (N)'}
@@ -538,6 +616,92 @@ export default function Dashboard() {
           className="transition-transform duration-300 ease-[var(--ease-out)]"
           style={{ transform: adding ? 'rotate(45deg)' : 'none' }}
         />
+      </button>
+    </div>
+  );
+}
+
+/** Bulk actions for the multi-selection (Cmd/Ctrl-click, Shift-click, Cmd/Ctrl+A). */
+function SelectionBar() {
+  const app = useApp();
+  const ids = app.selected;
+  const n = ids.length;
+  const [moveOpen, setMoveOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const allDone = ids.every(id => app.tasks.find(t => t.id === id)?.completedAt);
+  const allVisible = n >= app.visibleTasks.length;
+
+  useEffect(() => {
+    if (!moveOpen) return;
+    const close = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setMoveOpen(false);
+    window.addEventListener('pointerdown', close, true);
+    return () => window.removeEventListener('pointerdown', close, true);
+  }, [moveOpen]);
+
+  const done = (p: Promise<void>) => void p.then(app.clearSelection);
+
+  const del = async () => {
+    const ok = await app.confirm({
+      title: `Delete ${n} task${n === 1 ? '' : 's'}?`,
+      message: 'They will be removed on all your devices.',
+      confirmText: 'Delete',
+      danger: true,
+    });
+    if (ok) done(app.deleteTasks(ids));
+  };
+
+  const btn = 'press inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11.5px] font-semibold text-txt/90 hover:bg-white/[.07]';
+
+  return (
+    <div
+      ref={ref}
+      role="toolbar"
+      aria-label={`${n} selected`}
+      className="st-selbar anim-card absolute inset-x-4 bottom-5 z-40 flex items-center gap-0.5 rounded-2xl border border-white/[.08] bg-[#151a20]/95 p-1.5 pl-3 shadow-[0_16px_40px_-10px_rgba(0,0,0,.7)] backdrop-blur"
+    >
+      <span className="mr-auto whitespace-nowrap text-[12px] font-semibold tabular-nums text-acc">{n} selected</span>
+      {!allVisible && (
+        <button onClick={() => app.setSelected(app.visibleTasks.map(t => t.id))} className={cx(btn, 'text-mut')} title="Select all (Cmd/Ctrl+A)">
+          All
+        </button>
+      )}
+      <button onClick={() => done(app.completeTasks(ids, !allDone))} className={btn} title={allDone ? 'Mark as not done' : 'Mark as done'}>
+        <CheckCheck size={13} /> {allDone ? 'Undo' : 'Done'}
+      </button>
+      <div className="relative">
+        <button onClick={() => setMoveOpen(o => !o)} className={btn} aria-expanded={moveOpen} title="Move to category">
+          <FolderInput size={13} /> Move
+        </button>
+        {moveOpen && (
+          <div className="anim-card absolute bottom-full right-0 mb-2 max-h-64 w-48 overflow-y-auto rounded-xl border border-white/[.08] bg-[#151a20] p-1 shadow-[0_16px_40px_-10px_rgba(0,0,0,.7)]">
+            {app.categories.map(c => (
+              <button
+                key={c.id}
+                onClick={() => done(app.moveTasks(ids, c.id))}
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] hover:bg-white/[.06]"
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.color }} />
+                <span className="truncate">{c.name}</span>
+              </button>
+            ))}
+            {app.categories.length > 0 && <div className="my-1 h-px bg-white/[.06]" />}
+            <button
+              onClick={() => done(app.moveTasks(ids, null))}
+              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] text-mut hover:bg-white/[.06] hover:text-txt"
+            >
+              No category
+            </button>
+          </div>
+        )}
+      </div>
+      <button onClick={() => done(app.archiveTasks(ids))} className={btn} title="Archive">
+        <Archive size={13} />
+      </button>
+      <button onClick={() => void del()} className={cx(btn, 'hover:bg-danger/10 hover:text-danger')} title="Delete">
+        <Trash2 size={13} />
+      </button>
+      <button onClick={app.clearSelection} className={cx(btn, 'text-mut')} aria-label="Clear selection" title="Clear selection (Esc)">
+        <X size={14} />
       </button>
     </div>
   );

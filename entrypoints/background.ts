@@ -422,7 +422,7 @@ export default defineBackground(() => {
           await chrome.tabs.create({ url: links[id] });
           return;
         }
-        await storageSet(OPEN_SCREEN_KEY, 'activity');
+        await storageSet(OPEN_SCREEN_KEY, 'notifications');
       }
       try {
         await chrome.action.openPopup();

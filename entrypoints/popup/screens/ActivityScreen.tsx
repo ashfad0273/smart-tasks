@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, BellRing, Bot, Check, ChevronLeft, ExternalLink, History, Plus, RotateCcw, Trash2 } from 'lucide-react';
-import { api, ApiError, type ActivityEvent, type ActivityType, type InboxItem } from '../../../lib/api';
-import { storageGet, storageSet } from '../../../lib/ext';
-import { inboxKey } from '../../../lib/keys';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Archive, ArchiveRestore, BellRing, Bot, Check, ChevronLeft, History, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { api, ApiError, type ActivityEvent, type ActivityType } from '../../../lib/api';
 import { addDays, cx, formatTime, isSameDay } from '../../../lib/utils';
 import { useApp } from '../state/AppContext';
 
@@ -38,7 +36,7 @@ function dayLabel(ms: number): string {
   });
 }
 
-/** History of everything that happened to your tasks, plus messages from your AI agent. */
+/** History of everything that happened to your tasks. AI notifications have their own screen. */
 export default function ActivityScreen() {
   const app = useApp();
   const acc = app.account;
@@ -47,9 +45,6 @@ export default function ActivityScreen() {
   const [next, setNext] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
-  const [inbox, setInbox] = useState<InboxItem[]>([]);
-  // Notifications that were unread when the screen opened keep their "new" dot while you look.
-  const unreadAtOpen = useRef<Set<number> | null>(null);
 
   const load = useCallback(
     async (cursor = '') => {
@@ -72,17 +67,6 @@ export default function ActivityScreen() {
     void load();
   }, [load, taskSig]);
 
-  // Inbox: remember what was unread, then mark it all read (clears the toolbar badge).
-  useEffect(() => {
-    if (!acc || acc.local) return;
-    void (async () => {
-      const items = await storageGet<InboxItem[]>(inboxKey(acc.uid), []);
-      unreadAtOpen.current ??= new Set(items.filter(i => !i.read).map(i => i.id));
-      setInbox(items);
-      if (items.some(i => !i.read)) await storageSet(inboxKey(acc.uid), items.map(i => ({ ...i, read: true })));
-    })();
-  }, [acc, events]);
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !app.editTaskId && app.setScreen('dashboard');
     window.addEventListener('keydown', onKey);
@@ -91,7 +75,8 @@ export default function ActivityScreen() {
 
   // Local accounts have no server log: rebuild a simple history from task timestamps.
   const all = useMemo<ActivityEvent[]>(() => {
-    if (session) return events ?? [];
+    // Notifications live on their own screen (the bell); History is just what happened to tasks.
+    if (session) return (events ?? []).filter(e => e.type !== 'notice');
     const out: ActivityEvent[] = [];
     let n = 0;
     for (const t of app.allTasks) {
@@ -113,8 +98,6 @@ export default function ActivityScreen() {
     else groups.push({ label, items: [e] });
   }
 
-  const inboxFor = (e: ActivityEvent) =>
-    e.type === 'notice' ? inbox.find(i => i.title === e.title && Math.abs(i.createdAt - e.at) < 120_000) : undefined;
   const liveTask = (id: string | null) => (id ? app.allTasks.find(t => t.id === id) : undefined);
 
   const counts = {
@@ -128,7 +111,7 @@ export default function ActivityScreen() {
         <button onClick={() => app.setScreen('dashboard')} aria-label="Back" className="press rounded-lg p-1.5 text-mut hover:text-txt">
           <ChevronLeft size={18} />
         </button>
-        <h1 className="text-sm font-semibold">Activity</h1>
+        <h1 className="text-sm font-semibold">History</h1>
         <span className="w-7" />
       </header>
 
@@ -162,7 +145,7 @@ export default function ActivityScreen() {
             </span>
             <p className="mt-3 text-[13px] font-medium">Nothing here yet</p>
             <p className="mt-1 text-[11.5px] text-mut">
-              {filter === 'agent' ? 'Tasks and messages from your AI agent show up here.' : 'Add or finish a task and it lands here.'}
+              {filter === 'agent' ? 'Tasks your AI agent adds or changes show up here.' : 'Add or finish a task and it lands here.'}
             </p>
           </div>
         ) : (
@@ -181,8 +164,6 @@ export default function ActivityScreen() {
                 <ol className="relative space-y-0.5 before:absolute before:bottom-3 before:left-[17px] before:top-3 before:w-px before:bg-white/[.06]">
                   {g.items.map(e => {
                     const m = META[e.type];
-                    const box = inboxFor(e);
-                    const fresh = !!box && !!unreadAtOpen.current?.has(box.id);
                     const task = liveTask(e.taskId);
                     const body = (
                       <>
@@ -211,20 +192,8 @@ export default function ActivityScreen() {
                                 <Bot size={9} /> AI
                               </span>
                             )}
-                            {box?.url && (
-                              <a
-                                href={box.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={ev => ev.stopPropagation()}
-                                className="inline-flex items-center gap-0.5 text-acc hover:underline"
-                              >
-                                <ExternalLink size={9} /> Open link
-                              </a>
-                            )}
                           </span>
                         </span>
-                        {fresh && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-pop shadow-[0_0_8px_rgba(157,123,250,.8)]" aria-label="New" />}
                       </>
                     );
                     return (
@@ -237,7 +206,7 @@ export default function ActivityScreen() {
                             {body}
                           </button>
                         ) : (
-                          <div className={cx('flex items-start gap-2.5 rounded-xl px-1.5 py-1.5', fresh && 'bg-pop/[.05]')}>{body}</div>
+                          <div className="flex items-start gap-2.5 rounded-xl px-1.5 py-1.5">{body}</div>
                         )}
                       </li>
                     );

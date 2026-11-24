@@ -20,7 +20,7 @@ import {
 import type { AccountInfo, Category, DataSet, Registry, SyncOp, SyncState, SyncStatus, Task, TaskPatch } from '../../../lib/types';
 import { cheer, descErr, friendlyAuthError, hueFromString } from '../../../lib/utils';
 
-export type Screen = 'welcome' | 'login' | 'signup' | 'reset' | 'dashboard' | 'categories' | 'settings' | 'agent' | 'devices' | 'activity' | 'archive';
+export type Screen = 'welcome' | 'login' | 'signup' | 'reset' | 'dashboard' | 'categories' | 'settings' | 'agent' | 'devices' | 'activity' | 'archive' | 'notifications';
 export type Tab = 'all' | 'pending' | 'completed';
 /** due = by due date in Overdue/Today/... groups (default). */
 export type SortBy = 'due' | 'updated' | 'added' | 'priority';
@@ -109,6 +109,16 @@ interface AppCtx {
   createCategory(input: { name: string; color: string }): Promise<string | null>;
   updateCategory(id: string, patch: { name?: string; color?: string }): Promise<void>;
   deleteCategory(id: string): Promise<void>;
+  /** Multi-select (Cmd/Ctrl-click toggles, Shift-click selects a range). */
+  selected: string[];
+  selectTask(id: string, how: 'toggle' | 'range' | 'only'): void;
+  setSelected(ids: string[]): void;
+  clearSelection(): void;
+  /** Bulk actions; each shows one toast with Undo where it can. */
+  moveTasks(ids: string[], categoryId: string | null): Promise<void>;
+  completeTasks(ids: string[], done: boolean): Promise<void>;
+  archiveTasks(ids: string[]): Promise<void>;
+  deleteTasks(ids: string[]): Promise<void>;
   archiveTask(id: string, archived?: boolean): Promise<void>;
   archiveCategory(id: string, archived?: boolean): Promise<void>;
 
@@ -604,6 +614,62 @@ export function AppProvider({ children }: { children: ReactNode }) {
     showToast(`Cleared ${done.length} completed task${done.length === 1 ? '' : 's'}`, 'success');
   }, [data, showToast, write]);
 
+  const moveTasks = useCallback<AppCtx['moveTasks']>(
+    async (ids, categoryId) => {
+      const before = ids.map(id => [id, data.tasks[id]?.categoryId ?? null] as const).filter(([id]) => data.tasks[id]);
+      const now = Date.now();
+      await write(before.map(([id]) => ({ kind: 'task' as const, id, op: 'upsert' as const, data: { categoryId, updatedAt: now } })));
+      const name = categoryId ? (data.categories[categoryId]?.name ?? 'category') : 'No category';
+      showToast(`Moved ${before.length} task${before.length === 1 ? '' : 's'} to ${name}`, 'success', {
+        label: 'Undo',
+        run: () =>
+          void write(before.map(([id, c]) => ({ kind: 'task' as const, id, op: 'upsert' as const, data: { categoryId: c, updatedAt: Date.now() } }))),
+      });
+    },
+    [data.tasks, data.categories, showToast, write],
+  );
+
+  const completeTasks = useCallback<AppCtx['completeTasks']>(
+    async (ids, done) => {
+      const before = ids.map(id => [id, data.tasks[id]?.completedAt ?? null] as const).filter(([id]) => data.tasks[id]);
+      const now = Date.now();
+      await write(before.map(([id, c]) => ({ kind: 'task' as const, id, op: 'upsert' as const, data: { completedAt: done ? (c ?? now) : null, updatedAt: now } })));
+      if (done) setCelebrate(c => c + 1);
+      showToast(`${done ? 'Completed' : 'Reopened'} ${before.length} task${before.length === 1 ? '' : 's'}`, 'success', {
+        label: 'Undo',
+        run: () =>
+          void write(before.map(([id, c]) => ({ kind: 'task' as const, id, op: 'upsert' as const, data: { completedAt: c, updatedAt: Date.now() } }))),
+      });
+    },
+    [data.tasks, showToast, write],
+  );
+
+  const archiveTasks = useCallback<AppCtx['archiveTasks']>(
+    async ids => {
+      const set = (on: boolean) =>
+        write(ids.map(id => ({ kind: 'task' as const, id, op: 'upsert' as const, data: { archivedAt: on ? Date.now() : null, updatedAt: Date.now() } })));
+      await set(true);
+      showToast(`Archived ${ids.length} task${ids.length === 1 ? '' : 's'}`, 'info', { label: 'Undo', run: () => void set(false) });
+    },
+    [showToast, write],
+  );
+
+  const deleteTasks = useCallback<AppCtx['deleteTasks']>(
+    async ids => {
+      const gone = ids.map(id => data.tasks[id]).filter((t): t is Task => !!t);
+      await write(gone.map(t => ({ kind: 'task' as const, id: t.id, op: 'delete' as const })));
+      showToast(`Deleted ${gone.length} task${gone.length === 1 ? '' : 's'}`, 'info', {
+        label: 'Undo',
+        // Deletions are final on the server, so undo restores copies.
+        run: () =>
+          void write(
+            gone.map(({ id: _old, ...rest }) => ({ kind: 'task' as const, id: newId(), op: 'upsert' as const, data: { ...rest, updatedAt: Date.now() } })),
+          ),
+      });
+    },
+    [data.tasks, showToast, write],
+  );
+
   const archiveTask = useCallback<AppCtx['archiveTask']>(
     async (id, archived = true) => {
       const set = (on: boolean) => write([{ kind: 'task', id, op: 'upsert', data: { archivedAt: on ? Date.now() : null, updatedAt: Date.now() } }]);
@@ -729,6 +795,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [inFilter, tab, sortBy]);
 
+  /* ── multi-select ─────────────────────────────────────────────────── */
+
+  const [selected, setSelectedRaw] = useState<string[]>([]);
+  const anchor = useRef<string | null>(null);
+  const setSelected = useCallback((ids: string[]) => setSelectedRaw(ids), []);
+  const clearSelection = useCallback(() => {
+    setSelectedRaw([]);
+    anchor.current = null;
+  }, []);
+  const selectTask = useCallback<AppCtx['selectTask']>(
+    (id, how) => {
+      if (how === 'range' && anchor.current) {
+        const order = visibleTasks.map(t => t.id);
+        const a = order.indexOf(anchor.current);
+        const b = order.indexOf(id);
+        if (a >= 0 && b >= 0) {
+          const range = order.slice(Math.min(a, b), Math.max(a, b) + 1);
+          setSelectedRaw(prev => [...new Set([...prev, ...range])]);
+          return;
+        }
+      }
+      anchor.current = id;
+      if (how === 'only') setSelectedRaw([id]);
+      else setSelectedRaw(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+    },
+    [visibleTasks],
+  );
+  // Drop ids that left the list (deleted, archived, filtered away).
+  useEffect(() => {
+    setSelectedRaw(prev => {
+      const live = new Set(visibleTasks.map(t => t.id));
+      const next = prev.filter(id => live.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [visibleTasks]);
+
   const syncState: SyncState = !account
     ? 'synced'
     : account.local
@@ -818,6 +920,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     createCategory,
     updateCategory,
     deleteCategory,
+    selected,
+    selectTask,
+    setSelected,
+    clearSelection,
+    moveTasks,
+    completeTasks,
+    archiveTasks,
+    deleteTasks,
     archiveTask,
     archiveCategory,
     celebrate,
