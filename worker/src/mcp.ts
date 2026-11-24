@@ -186,6 +186,45 @@ const DUE_DESC =
 
 const TOOLS = [
   {
+    name: 'list_requests',
+    title: 'Tasks the user approved for AI',
+    description:
+      'Tasks the user pressed "OK, send to AI" on, waiting for an agent to do them. Requests from tasks you (this key and session) created are shown first; ' +
+      'others become visible to any agent after 10 minutes. Call this when checking in (e.g. on a /loop), then claim_request before starting.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        session: { type: 'string', description: 'Your session id, the same one you passed to add_task.' },
+        mine_only: { type: 'boolean', description: 'Only requests for tasks this key/session created. Default false.' },
+      },
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'claim_request',
+    title: 'Start an approved task',
+    description: 'Claim an approved task so no other agent picks it up, then do the work.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string' }, session: { type: 'string' } },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'finish_request',
+    title: 'Report an approved task done',
+    description: 'Report the result of a claimed task. Marks it done unless done=false (e.g. it failed or needs the user), and records your note.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        result: { type: 'string', description: 'Short summary of what you did, or why it could not be done.' },
+        done: { type: 'boolean', description: 'Default true. false hands it back to the user.' },
+      },
+      required: ['id', 'result'],
+    },
+  },
+  {
     name: 'list_tasks',
     title: 'List tasks',
     description:
@@ -216,6 +255,7 @@ const TOOLS = [
         priority: { type: ['string', 'null'], enum: ['low', 'medium', 'high', null] },
         category: { type: 'string', description: 'Category name.' },
         subtasks: { type: 'array', items: { type: 'string' }, description: 'Checklist items.' },
+        session: { type: 'string', description: 'Your session id (e.g. Claude Code session id), so approved follow-ups come back to you.' },
       },
       required: ['title'],
     },
@@ -366,9 +406,68 @@ function dayStart(ms: number, tz: string): number {
   return startLocal - zoneOffsetMs(startLocal, tz);
 }
 
+/** Approved tasks go to the agent that created them first, then to anyone. */
+const FALLBACK_MS = 10 * 60_000;
+/** A claim with no finish after this long is treated as abandoned. */
+const CLAIM_STALE_MS = 2 * 60 * 60_000;
+type Req = { status: 'approved' | 'claimed' | 'done'; at: number; by: string | null; session: string | null; note: string | null };
+const sessionArg = (a: Record<string, unknown>) => (typeof a.session === 'string' && a.session.trim() ? a.session.trim().slice(0, 120) : null);
+
 async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Promise<unknown> {
   const now = Date.now();
   switch (name) {
+    case 'list_requests': {
+      const session = sessionArg(a);
+      const cats = await catMap(ctx);
+      const mine = (t: Rec) => {
+        const src = t.source as { agent: string; session: string | null } | null | undefined;
+        if (!src) return false;
+        return session && src.session ? src.session === session : src.agent === ctx.agent;
+      };
+      const out = (await list(ctx, 'task'))
+        .filter(t => {
+          const r = t.aiRequest as Req | null | undefined;
+          if (!r || t.completedAt != null) return false;
+          const open = r.status === 'approved' || (r.status === 'claimed' && now - r.at > CLAIM_STALE_MS);
+          if (!open) return false;
+          if (mine(t)) return true;
+          return !a.mine_only && now - r.at > FALLBACK_MS;
+        })
+        .sort((x, y) => Number(mine(y)) - Number(mine(x)) || (x.aiRequest as Req).at - (y.aiRequest as Req).at)
+        .map(t => ({ ...view(t, cats, ctx.tz), approved: fmtLocal((t.aiRequest as Req).at, ctx.tz), yours: mine(t) }));
+      return { total: out.length, requests: out, hint: out.length ? 'claim_request before starting each one.' : 'Nothing approved right now.' };
+    }
+
+    case 'claim_request': {
+      need(ctx, 'edit');
+      const t = await findTask(ctx, a.id);
+      const r = t.aiRequest as Req | null | undefined;
+      if (!r || r.status === 'done') throw new ToolError('That task is not waiting for an agent.');
+      if (r.status === 'claimed' && now - r.at <= CLAIM_STALE_MS && r.by !== ctx.agent) throw new ToolError(`${r.by ?? 'Another agent'} is already working on it.`);
+      const aiRequest = { status: 'claimed', at: now, by: ctx.agent, session: sessionArg(a), note: null };
+      await push(ctx, [{ kind: 'task', id: t.id, op: 'upsert', data: { aiRequest, updatedAt: now } }]);
+      return { claimed: view(t, await catMap(ctx), ctx.tz), next: 'Do the task, then call finish_request with a short result.' };
+    }
+
+    case 'finish_request': {
+      need(ctx, 'edit');
+      const t = await findTask(ctx, a.id);
+      const r = t.aiRequest as Req | null | undefined;
+      if (!r) throw new ToolError('That task was not sent to AI.');
+      const result = str(a.result, 'result', true)!;
+      const done = a.done !== false;
+      if (done) need(ctx, 'complete');
+      const data: Record<string, unknown> = {
+        aiRequest: { status: done ? 'done' : 'approved', at: now, by: ctx.agent, session: r.session, note: result },
+        updatedAt: now,
+      };
+      if (done) data.completedAt = now;
+      else data.aiRequest = null; // handed back to the user; they can press OK again
+      if (!done) data.notes = [t.notes, `AI (${ctx.agent}): ${result}`].filter(Boolean).join('\n\n');
+      await push(ctx, [{ kind: 'task', id: t.id, op: 'upsert', data }]);
+      return { finished: done, task: t.title };
+    }
+
     case 'list_tasks': {
       const status = (a.status as string) ?? 'pending';
       const limit = Math.min(200, Math.max(1, Number(a.limit) || 50));
@@ -417,7 +516,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
     case 'add_task': {
       need(ctx, 'add');
       const title = str(a.title, 'title', true)!;
-      const data: Record<string, unknown> = { title, order: now, createdAt: now, updatedAt: now };
+      const data: Record<string, unknown> = { title, order: now, createdAt: now, updatedAt: now, source: { agent: ctx.agent, session: sessionArg(a) } };
       if (a.notes != null) data.notes = str(a.notes, 'notes');
       if (a.due !== undefined) data.dueAt = parseDue(a.due, ctx.tz);
       if (a.priority !== undefined) data.priority = priority(a.priority);
@@ -652,6 +751,8 @@ const TOOL_PERMS: Record<string, AgentPerm[]> = {
   delete_category: ['categories', 'delete'],
   create_category: ['categories'],
   notify: ['notify'],
+  claim_request: ['edit'],
+  finish_request: ['edit'],
 };
 const allowed = (ctx: Ctx, tool: string) => (TOOL_PERMS[tool] ?? []).every(p => ctx.perms[p]);
 
@@ -677,6 +778,9 @@ async function handle(ctx: Ctx, msg: RpcMsg): Promise<object | null> {
           'Call list_tasks before editing so you use real ids. Only delete when explicitly asked; prefer complete_task for "done". ' +
           'Use notify to ping the user on their desktop when they asked to be told about something. ' +
           'Prefer archive over delete when something just needs to be out of the way. ' +
+          'Pass your session id as `session` to add_task so tasks you create can be sent back to you. ' +
+          'The user can press "OK, send to AI" on a task: check list_requests when you start and periodically (e.g. `/loop 5m check Smart Tasks for approved tasks`), ' +
+          'claim_request before working, and finish_request with a short result when done. ' +
           `The user controls what agents may do; right now: ${Object.entries(ctx.perms).map(([k, v]) => `${k} ${v ? 'on' : 'off'}`).join(', ')}.`,
       });
     }

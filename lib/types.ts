@@ -22,10 +22,30 @@ export interface Task {
   /** epoch ms when archived (hidden, not deleted); null/missing = active */
   archivedAt?: number | null;
   subtasks: Subtask[];
+  /** Set when an AI agent created the task: its key name and (if it said) its session id. */
+  source?: TaskSource | null;
+  /** "OK, send to AI" hand-off: approved by you, then claimed and finished by an agent. */
+  aiRequest?: AiRequest | null;
   /** sort key (descending) */
   order: number;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface TaskSource {
+  agent: string;
+  session: string | null;
+}
+
+export interface AiRequest {
+  status: 'approved' | 'claimed' | 'done';
+  /** epoch ms of the last status change */
+  at: number;
+  /** agent key name that claimed or finished it */
+  by: string | null;
+  session: string | null;
+  /** what the agent reported when it finished */
+  note: string | null;
 }
 
 export type TaskPatch = Partial<Omit<Task, 'id' | 'createdAt'>>;

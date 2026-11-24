@@ -88,6 +88,31 @@ function cleanTask(d: Record<string, unknown>): Record<string, unknown> {
           return { id: o.id, title: str(o.title, LIMITS.subtaskTitle, 'subtask title'), done: o.done === true };
         });
         break;
+      case 'source':
+        // Which agent (and session) created the task; set by the MCP server.
+        if (v === null) out.source = null;
+        else {
+          const o = v as Record<string, unknown>;
+          out.source = { agent: str(o?.agent, 60, 'source.agent'), session: o?.session == null ? null : str(o.session, 120, 'source.session') };
+        }
+        break;
+      case 'aiRequest': {
+        // "OK, send to AI": approved by the user, then claimed and finished by an agent.
+        if (v === null) {
+          out.aiRequest = null;
+          break;
+        }
+        const o = v as Record<string, unknown>;
+        if (o?.status !== 'approved' && o?.status !== 'claimed' && o?.status !== 'done') throw new BadRequest('bad aiRequest.status');
+        out.aiRequest = {
+          status: o.status,
+          at: isNum(o.at) ? o.at : Date.now(),
+          by: o.by == null ? null : str(o.by, 60, 'aiRequest.by'),
+          session: o.session == null ? null : str(o.session, 120, 'aiRequest.session'),
+          note: o.note == null ? null : str(o.note, LIMITS.notes, 'aiRequest.note'),
+        };
+        break;
+      }
       default:
       // unknown fields are dropped
     }
@@ -131,6 +156,8 @@ export function taskDefaults(now: number): Record<string, unknown> {
     completedAt: null,
     archivedAt: null,
     subtasks: [],
+    source: null,
+    aiRequest: null,
     order: now,
     createdAt: now,
     updatedAt: now,

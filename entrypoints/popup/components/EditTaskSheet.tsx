@@ -19,6 +19,7 @@ import {
 import type { Priority, Subtask, Task } from '../../../lib/types';
 import { useApp } from '../state/AppContext';
 import Sheet from './Sheet';
+import { AiPanel, canSendToAi } from './AiRequest';
 import DueEditor from './DueEditor';
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
@@ -299,6 +300,7 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
             <span className="truncate">{task.url.replace(/^https?:\/\//, '')}</span>
           </a>
         )}
+        {(canSendToAi(task) || task.aiRequest?.status === 'done') && <AiPanel task={task} />}
 
         <Section label="Category">
           <div className="flex flex-wrap gap-1.5">

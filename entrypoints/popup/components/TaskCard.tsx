@@ -4,6 +4,7 @@ import { cx, formatDue, formatStamp, PRIORITY_META } from '../../../lib/utils';
 import type { Task } from '../../../lib/types';
 import { useApp } from '../state/AppContext';
 import Burst from './Burst';
+import { AiChip, canSendToAi } from './AiRequest';
 
 /** dataTransfer type for dragged task ids (JSON array). */
 export const TASK_DRAG_TYPE = 'application/x-smart-tasks';
@@ -14,7 +15,8 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
   // Inside a category's own filter the chip says nothing new, so it folds away there.
   const showCat = !!cat && app.filter !== task.categoryId;
   const done = !!task.completedAt;
-  const hasMeta = showCat || !!task.dueAt || !!task.url || done;
+  const ai = canSendToAi(task) || task.aiRequest?.status === 'done';
+  const hasMeta = showCat || !!task.dueAt || !!task.url || done || ai;
   const due = task.dueAt ? formatDue(task.dueAt) : null;
   const doneSubs = task.subtasks.filter(s => s.done).length;
   const [burst, setBurst] = useState(0);
@@ -174,6 +176,7 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
         {/* Chips row folds open/closed smoothly instead of popping. */}
         <div className="expander" data-open={hasMeta} style={{ marginTop: hasMeta ? 8 : 0 }} inert={!hasMeta}>
           <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
+            {ai && <AiChip task={task} />}
             {cat && (
               <button
                 onClick={() => app.setFilter(cat.id)}
