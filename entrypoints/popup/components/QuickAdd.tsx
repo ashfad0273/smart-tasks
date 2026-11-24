@@ -5,9 +5,15 @@ import { useApp } from '../state/AppContext';
 
 const IDEAS = ['Water the plants tomorrow 9am', 'Reply to Sam #work !high', 'Book dentist friday 4pm', 'Plan the week sunday'];
 
-/** Quick-add panel that slides up above the floating plus button. Stays open for several tasks in a row. */
-export default function QuickAdd({ open, onClose }: { open: boolean; onClose: () => void }) {
+/**
+ * Quick-add panel. In the popup it slides up above the floating plus button; with
+ * `anchor` (the desktop layout) it opens in place of that element, the "Add a task" row.
+ * Stays open for several tasks in a row.
+ */
+export default function QuickAdd({ open, onClose, anchor }: { open: boolean; onClose: () => void; anchor?: React.RefObject<HTMLElement | null> }) {
   const app = useApp();
+  const wrap = useRef<HTMLDivElement>(null);
+  const [spot, setSpot] = useState<{ top: number; left: number; width: number } | null>(null);
   const [text, setText] = useState('');
   const [added, setAdded] = useState(0);
   const [shake, setShake] = useState(0);
@@ -21,6 +27,9 @@ export default function QuickAdd({ open, onClose }: { open: boolean; onClose: ()
   useEffect(() => {
     if (!open) return;
     setAdded(0);
+    const a = anchor?.current?.getBoundingClientRect();
+    const box = wrap.current?.getBoundingClientRect();
+    setSpot(a && box && a.width ? { top: a.top - box.top - 12, left: a.left - box.left - 12, width: a.width + 24 } : null);
     const id = setTimeout(() => ref.current?.focus(), 30);
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && closeRef.current();
     window.addEventListener('keydown', onKey);
@@ -55,7 +64,7 @@ export default function QuickAdd({ open, onClose }: { open: boolean; onClose: ()
   };
 
   return (
-    <div className={cx('absolute inset-0 z-30', !open && 'pointer-events-none')} aria-hidden={!open}>
+    <div ref={wrap} className={cx('absolute inset-0 z-30', !open && 'pointer-events-none')} aria-hidden={!open}>
       <div
         onClick={onClose}
         className={cx('absolute inset-0 bg-black/55 backdrop-blur-[2px] transition-opacity duration-300', open ? 'opacity-100' : 'opacity-0')}
@@ -64,10 +73,11 @@ export default function QuickAdd({ open, onClose }: { open: boolean; onClose: ()
         onSubmit={submit}
         inert={!open}
         className={cx(
-          'st-quickadd absolute inset-x-4 bottom-20 rounded-3xl border border-white/[.07] bg-surface p-3.5 shadow-[0_24px_60px_rgba(0,0,0,.55)] transition-[transform,opacity] duration-300 ease-[var(--ease-out)]',
-          open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-4 opacity-0',
+          'absolute rounded-3xl border border-white/[.07] bg-surface p-3.5 shadow-[0_24px_60px_rgba(0,0,0,.55)] transition-[transform,opacity] duration-300 ease-[var(--ease-out)]',
+          !spot && 'st-quickadd inset-x-4 bottom-20',
+          open ? 'translate-y-0 scale-100 opacity-100' : cx('pointer-events-none opacity-0', spot ? '-translate-y-1 scale-[.98]' : 'translate-y-4'),
         )}
-        style={{ transformOrigin: 'bottom right' }}
+        style={spot ? { top: spot.top, left: spot.left, width: spot.width, transformOrigin: 'top center' } : { transformOrigin: 'bottom right' }}
       >
         <div className="flex items-center justify-between px-1">
           <p className="text-[12px] font-semibold text-mut">New task</p>

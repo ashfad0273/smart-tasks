@@ -62,7 +62,7 @@ class HttpError extends Error {
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type, Mcp-Protocol-Version, Mcp-Session-Id',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type, Mcp-Protocol-Version, Mcp-Session-Id, X-Client',
   'Access-Control-Max-Age': '86400',
 };
 
@@ -88,6 +88,12 @@ async function rateLimit(env: Env, req: Request, route: string): Promise<void> {
   const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown';
   const { success } = await env.AUTH_LIMITER.limit({ key: `${route}:${ip}` });
   if (!success) throw new HttpError(429, 'too-many-requests', 'Too many attempts — wait a minute and try again.');
+}
+
+/** The device list name: the client's own label (X-Client), else guessed from the User-Agent. */
+function deviceOf(req: Request): string {
+  const own = req.headers.get('X-Client')?.replace(/[^\w .,()+-]/g, '').trim().slice(0, 60);
+  return own || deviceName(req.headers.get('User-Agent'));
 }
 
 /** "Chrome on macOS" from a User-Agent string. */
@@ -141,7 +147,7 @@ async function createSession(env: Env, userId: string, req?: Request): Promise<s
       now + SESSION_TTL,
       now,
       newSessionId(),
-      req ? deviceName(req.headers.get('User-Agent')) : null,
+      req ? deviceOf(req) : null,
       req ? locationOf(req) : null,
     )
     .run();
@@ -160,14 +166,16 @@ async function authenticate(env: Env, token: string | null, req?: Request): Prom
     .first<Authed & { expires_at: number; last_seen: number; device: string | null }>();
   const now = Date.now();
   if (!row || row.expires_at < now) throw new HttpError(401, 'session-expired', 'Your session expired — please sign in again.');
-  if (now - row.last_seen > 5 * 60_000 || !row.device || !row.session_id) {
+  const label = req ? deviceOf(req) : null;
+  const relabel = !!req?.headers.get('X-Client') && label !== row.device;
+  if (now - row.last_seen > 5 * 60_000 || !row.device || !row.session_id || relabel) {
     // "Last active" + sliding expiry, written at most every few minutes.
     // Sessions from before the device list get their name/id filled in here.
     const id = row.session_id || newSessionId();
     await env.DB.prepare(
-      'UPDATE sessions SET last_seen = ?, expires_at = ?, id = ?, device = COALESCE(device, ?), location = COALESCE(location, ?) WHERE token_hash = ?',
+      'UPDATE sessions SET last_seen = ?, expires_at = ?, id = ?, device = CASE WHEN ? THEN ? ELSE COALESCE(device, ?) END, location = COALESCE(location, ?) WHERE token_hash = ?',
     )
-      .bind(now, now + SESSION_TTL, id, req ? deviceName(req.headers.get('User-Agent')) : null, req ? locationOf(req) : null, hash)
+      .bind(now, now + SESSION_TTL, id, relabel ? 1 : 0, label, label, req ? locationOf(req) : null, hash)
       .run();
     row.session_id = id;
   }

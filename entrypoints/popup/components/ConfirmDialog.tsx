@@ -25,7 +25,7 @@ export default function ConfirmDialog() {
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center p-5" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] animate-[fadeIn_.12s_ease-out]" onClick={() => resolveConfirm(false)} />
-      <div className="anim-pop relative w-full rounded-3xl border border-line bg-surface p-5 shadow-2xl">
+      <div className="anim-pop relative w-full max-w-[360px] rounded-3xl border border-line bg-surface p-5 shadow-2xl">
         <div className="flex flex-col items-center text-center">
           <span
             className={`grid h-12 w-12 place-items-center rounded-2xl ${opts.danger ? 'bg-danger/15 text-danger' : 'bg-acc/15 text-acc'}`}

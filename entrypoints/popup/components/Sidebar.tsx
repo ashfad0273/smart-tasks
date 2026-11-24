@@ -158,7 +158,7 @@ export default function Sidebar() {
   const syncTone = app.sync === 'error' ? 'text-danger' : app.sync === 'offline' || app.sync === 'local' ? 'text-mut' : 'text-acc';
 
   return (
-    <aside className="flex h-full w-[236px] shrink-0 flex-col border-r border-white/[.05] bg-black/25 px-2.5 pb-3 pt-3.5">
+    <aside className="st-sidebar flex h-full w-[236px] shrink-0 flex-col border-r border-white/[.05] bg-black/25 px-2.5 pb-3 pt-3.5">
       <button
         onClick={() => app.setSwitcherOpen(true)}
         title="Switch account"

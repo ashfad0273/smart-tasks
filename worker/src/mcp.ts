@@ -449,6 +449,12 @@ const sessionArg = (a: Record<string, unknown>) => (typeof a.session === 'string
 const scopeArg = (a: Record<string, unknown>) => (typeof a.scope === 'string' && a.scope.trim() ? a.scope.trim().slice(0, 200) : null);
 type Src = { agent: string; session: string | null; scope?: string | null };
 
+/** Returned whenever an agent puts an OK button up: the answer arrives in the app, and nothing wakes the agent by itself. */
+const WAIT_HINT =
+  'The user answers this in the Smart Tasks app, and nothing wakes you when they do. Before ending your turn, schedule a check: ' +
+  'in Claude Code create a recurring job (CronCreate, every 5 minutes) or ask the user to run `/loop 5m check Smart Tasks for approved tasks`; ' +
+  'each check calls list_requests, then claim_request and finish_request. Also tell the user they can just say "check Smart Tasks" here.';
+
 function approvalArg(v: unknown): Approval | null {
   try {
     return cleanApproval(v);
@@ -615,7 +621,8 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
       const id = crypto.randomUUID();
       await push(ctx, [{ kind: 'task', id, op: 'upsert', data }]);
       const t = (await list(ctx, 'task')).find(x => x.id === id)!;
-      return { added: view(t, await catMap(ctx), ctx.tz) };
+      const asks = data.approval != null || (Array.isArray(data.subtasks) && (data.subtasks as Array<{ approval?: unknown }>).some(s => s.approval != null));
+      return { added: view(t, await catMap(ctx), ctx.tz), ...(asks ? { next: WAIT_HINT } : {}) };
     }
 
     case 'update_task': {
@@ -734,7 +741,8 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
       }
       await push(ctx, [{ kind: 'task', id: t.id, op: 'upsert', data: { subtasks: subs, updatedAt: now } }]);
       const after = (await list(ctx, 'task')).find(x => x.id === t.id)!;
-      return { changes: done, task: view(after, await catMap(ctx), ctx.tz) };
+      const asks = (a.actions as Array<{ op?: string; approval?: unknown }>).some(x => (x.op === 'add' || x.op === 'set_approval') && x.approval != null);
+      return { changes: done, task: view(after, await catMap(ctx), ctx.tz), ...(asks ? { next: WAIT_HINT } : {}) };
     }
 
     case 'complete_task': {

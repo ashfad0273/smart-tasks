@@ -17,9 +17,14 @@ export default function CategoryModal() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && app.closeCategoryModal();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // Capture phase: closes this first and keeps the page underneath from also handling Escape.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      app.closeCategoryModal();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [app]);
 
   const save = async () => {
@@ -36,7 +41,7 @@ export default function CategoryModal() {
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center p-5" role="dialog" aria-modal="true" aria-labelledby="cat-title">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] animate-[fadeIn_.12s_ease-out]" onClick={app.closeCategoryModal} />
-      <div className="anim-pop relative w-full rounded-3xl border border-line bg-surface p-5 shadow-2xl">
+      <div className="anim-pop relative w-full max-w-[380px] rounded-3xl border border-line bg-surface p-5 shadow-2xl">
         <h3 id="cat-title" className="text-base font-semibold">
           {editing ? 'Edit category' : 'New category'}
         </h3>
@@ -57,6 +62,8 @@ export default function CategoryModal() {
             placeholder="e.g. Side hustle"
             maxLength={40}
             aria-label="Category name"
+            spellCheck={false}
+            autoComplete="off"
             className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:font-medium placeholder:text-mut/50"
           />
         </div>

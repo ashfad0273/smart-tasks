@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, Bot, Check, ChevronDown, Copy, ExternalLink, GripVertical, Plus, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Bot, Check, ChevronDown, ChevronRight, Copy, ExternalLink, GripVertical, Plus, Trash2, X } from 'lucide-react';
 import { api, type ActivityEvent } from '../../../lib/api';
 import {
   addDays,
@@ -73,9 +73,10 @@ function Dock({ onClose, label, children }: { onClose: () => void; label: string
   return (
     <aside
       aria-label={label}
-      className="st-dock flex h-full w-[360px] shrink-0 flex-col border-l border-white/[.05] bg-[#0f181b]/80 animate-[dockIn_.32s_var(--ease-out)]"
+      className="st-dock flex h-full w-[360px] shrink-0 flex-col overflow-hidden border-l border-white/[.05] bg-[#0f181b]/80"
     >
-      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto pt-3.5">{children}</div>
+      {/* Fixed-width content: the panel grows open around it, so the text never reflows mid-animation. */}
+      <div className="hide-scrollbar min-h-0 w-[360px] flex-1 overflow-y-auto pt-3.5">{children}</div>
     </aside>
   );
 }
@@ -95,8 +96,9 @@ function TaskHistory({ task }: { task: Task }) {
   const app = useApp();
   const session = app.account && !app.account.local ? app.account.token : null;
   const [events, setEvents] = useState<ActivityEvent[] | null>(null);
+  const [open, setOpen] = useState(false);
   useEffect(() => {
-    if (!session) return;
+    if (!session || !open) return;
     let live = true;
     const t = setTimeout(
       () =>
@@ -111,10 +113,21 @@ function TaskHistory({ task }: { task: Task }) {
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, task.id, task.completedAt, task.archivedAt, task.categoryId]);
+  }, [session, open, task.id, task.completedAt, task.archivedAt, task.categoryId]);
   if (!session) return null;
   return (
-    <Section label="Activity">
+    <div className="mt-4">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="press flex w-full items-center gap-1.5 text-left text-xs font-semibold text-mut hover:text-txt"
+      >
+        <ChevronRight size={13} className={cx('transition-transform duration-200', open && 'rotate-90')} />
+        Activity
+      </button>
+      {open && (
+      <div className="anim-pop mt-1.5">
       {events === null ? (
         <div className="skeleton h-14 rounded-xl" />
       ) : events.length === 0 ? (
@@ -138,7 +151,9 @@ function TaskHistory({ task }: { task: Task }) {
           ))}
         </ol>
       )}
-    </Section>
+      </div>
+      )}
+    </div>
   );
 }
 

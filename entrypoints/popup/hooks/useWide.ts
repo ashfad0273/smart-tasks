@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 /** Desktop app window at least this wide gets the sidebar layout. */
-export const WIDE_MIN = 900;
+export const WIDE_MIN = 720;
 
 const isWide = () =>
   typeof document !== 'undefined' && document.documentElement.classList.contains('desktop') && window.innerWidth >= WIDE_MIN;

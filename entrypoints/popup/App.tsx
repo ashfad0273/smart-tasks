@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import CategoriesScreen from './screens/CategoriesScreen';
 import Dashboard from './screens/Dashboard';
 import Login from './screens/Login';
@@ -52,16 +53,30 @@ const NARROW_PAGES = new Set(['activity', 'archive', 'notifications', 'devices',
 /** Desktop app, wide window: sidebar + page + docked task panel. */
 function Shell() {
   const app = useApp();
+  const dockOpen = !!app.editTaskId && app.screen !== 'settings';
+  // Keep an empty panel for a moment after closing so it slides shut instead of vanishing.
+  const [closing, setClosing] = useState(false);
+  const wasOpen = useRef(dockOpen);
+  useEffect(() => {
+    if (wasOpen.current && !dockOpen) {
+      setClosing(true);
+      const t = setTimeout(() => setClosing(false), 280);
+      wasOpen.current = dockOpen;
+      return () => clearTimeout(t);
+    }
+    wasOpen.current = dockOpen;
+    setClosing(false);
+  }, [dockOpen]);
   const page = app.screen === 'settings' ? <DesktopSettings /> : <Screen />;
   return (
-    <div className="st-shell flex h-full">
+    <div className="st-shell relative flex h-full">
       <Sidebar />
       <main className="@container relative min-w-0 flex-1 overflow-hidden">
         <div key={app.screen} className="anim-screen h-full">
           {NARROW_PAGES.has(app.screen) ? <div className="mx-auto h-full max-w-[720px]">{page}</div> : page}
         </div>
       </main>
-      {app.editTaskId && <EditTaskSheet docked key={app.editTaskId} />}
+      {dockOpen ? <EditTaskSheet docked key={app.editTaskId} /> : closing && <div className="st-dock st-dock-out" aria-hidden="true" />}
     </div>
   );
 }

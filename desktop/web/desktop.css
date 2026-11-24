@@ -48,3 +48,73 @@ html.desktop #root {
     margin-inline: auto;
   }
 }
+
+/* ── Wide layout: every size change glides instead of jumping. ── */
+html.desktop .st-sidebar {
+  transition: width 0.3s var(--ease-out);
+}
+@media (max-width: 999px) {
+  html.desktop .st-sidebar {
+    width: 208px;
+  }
+}
+
+/* Task list on very wide screens: a comfortable centred column. */
+html.desktop .st-wide {
+  padding-inline: max(0px, calc((100% - 1100px) / 2));
+  transition: padding 0.3s var(--ease-out);
+}
+
+/* Task panel: grows open beside the list (the list eases over to make room)… */
+html.desktop .st-dock {
+  animation: dockGrow 0.32s var(--ease-out);
+}
+html.desktop .st-dock-out {
+  width: 0;
+  flex-shrink: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(15, 24, 27, 0.8);
+  animation: dockShrink 0.28s var(--ease-out);
+}
+@keyframes dockGrow {
+  from { width: 0; opacity: 0.4; }
+  to { width: 360px; opacity: 1; }
+}
+@keyframes dockShrink {
+  from { width: 360px; }
+  to { width: 0; }
+}
+
+/* …and on smaller windows it slides over the list instead of squeezing it. */
+@media (max-width: 1099px) {
+  html.desktop .st-dock,
+  html.desktop .st-dock-out {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    width: 360px;
+    background: #0f181b;
+    box-shadow: -24px 0 60px rgba(0, 0, 0, 0.45);
+    animation: dockSlideIn 0.32s var(--ease-out);
+  }
+  html.desktop .st-dock-out {
+    animation: dockSlideOut 0.28s var(--ease-out) forwards;
+  }
+}
+@keyframes dockSlideIn {
+  from { transform: translateX(100%); }
+  to { transform: none; }
+}
+@keyframes dockSlideOut {
+  from { transform: none; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.desktop .st-sidebar,
+  html.desktop .st-wide { transition: none; }
+  html.desktop .st-dock,
+  html.desktop .st-dock-out { animation-duration: 1ms; }
+}

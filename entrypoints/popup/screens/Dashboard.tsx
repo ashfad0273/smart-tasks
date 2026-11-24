@@ -185,6 +185,7 @@ export default function Dashboard() {
   const app = useApp();
   const wide = useWide();
   const [adding, setAdding] = useState(false);
+  const addRow = useRef<HTMLButtonElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
@@ -365,6 +366,7 @@ export default function Dashboard() {
           pct={pct}
           tabs={tabs}
           onAdd={() => setAdding(true)}
+          addRow={addRow}
         />
       ) : (
       <header className="flex items-center gap-3 px-6 pt-6">
@@ -644,7 +646,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      <QuickAdd open={adding} onClose={() => setAdding(false)} />
+      <QuickAdd open={adding} onClose={() => setAdding(false)} anchor={wide ? addRow : undefined} />
       {app.selected.length > 0 && <SelectionBar />}
       <button
         hidden={app.selected.length > 0 || wide}
@@ -758,6 +760,7 @@ function WideHeader({
   pct,
   tabs,
   onAdd,
+  addRow,
 }: {
   sortMenu: React.ReactNode;
   streak: number;
@@ -765,6 +768,7 @@ function WideHeader({
   pct: number;
   tabs: Array<{ id: Tab; label: string; count: number }>;
   onAdd: () => void;
+  addRow: React.RefObject<HTMLButtonElement | null>;
 }) {
   const app = useApp();
   const cat = app.filter !== 'all' ? app.categoryById(app.filter) : null;
@@ -832,6 +836,7 @@ function WideHeader({
         {pct > 0 && <div className="meter-fill h-full rounded-full transition-[width] duration-700" style={{ width: `${Math.max(pct, 3)}%` }} />}
       </div>
       <button
+        ref={addRow}
         onClick={onAdd}
         className="press mx-6 mt-3 flex items-center gap-2.5 rounded-xl border border-dashed border-white/[.1] px-4 py-2.5 text-left text-[12.5px] text-mut hover:border-acc/40 hover:text-acc"
       >

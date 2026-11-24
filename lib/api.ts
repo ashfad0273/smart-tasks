@@ -26,11 +26,41 @@ export class ApiError extends Error {
   }
 }
 
+/** How this client names itself in the device list: "Smart Tasks app on Windows", "Extension in Brave on macOS". */
+function clientLabel(): string {
+  const nav = navigator as Navigator & { userAgentData?: { brands?: Array<{ brand: string }>; platform?: string }; brave?: unknown };
+  const ua = navigator.userAgent;
+  const p = nav.userAgentData?.platform || ua;
+  const os = /Win/i.test(p) ? 'Windows' : /Mac/i.test(p) ? 'macOS' : /CrOS|Chrome OS/i.test(p) ? 'ChromeOS' : /Linux/i.test(p) ? 'Linux' : '';
+  const on = os ? ` on ${os}` : '';
+  if ((globalThis as { __ST_DESKTOP__?: boolean }).__ST_DESKTOP__) return `Smart Tasks app${on}`;
+  const brand = nav.userAgentData?.brands?.map(b => b.brand).find(b => !/Chromium|Not.?A.?Brand/i.test(b));
+  const browser = nav.brave
+    ? 'Brave'
+    : brand
+      ? brand.replace(/^Google |^Microsoft /, '')
+      : /Edg\//.test(ua)
+        ? 'Edge'
+        : /OPR\//.test(ua)
+          ? 'Opera'
+          : /Firefox\//.test(ua)
+            ? 'Firefox'
+            : /Chrome\//.test(ua)
+              ? 'Chrome'
+              : 'browser';
+  return `Extension in ${browser}${on}`;
+}
+
 async function call<T>(path: string, init: RequestInit & { token?: string | null; timeoutMs?: number } = {}): Promise<T> {
   const { token, timeoutMs = 15_000, ...rest } = init;
   const headers: Record<string, string> = { ...(rest.headers as Record<string, string>) };
   if (rest.body) headers['Content-Type'] = 'application/json';
   if (token) headers.Authorization = `Bearer ${token}`;
+  try {
+    headers['X-Client'] = clientLabel();
+  } catch {
+    /* no navigator (tests): the server falls back to the User-Agent */
+  }
   let res: Response;
   try {
     res = await fetch(API_URL + path, { ...rest, headers, signal: AbortSignal.timeout(timeoutMs) });

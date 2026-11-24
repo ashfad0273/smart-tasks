@@ -12,9 +12,14 @@ export default function SwitchAccountModal() {
   const wide = useWide();
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && app.setSwitcherOpen(false);
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // Capture phase: closes this first and keeps the page underneath from also handling Escape.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      app.setSwitcherOpen(false);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [app]);
 
   const remove = async (a: AccountInfo) => {
