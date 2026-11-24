@@ -81,6 +81,7 @@ export default function TaskCard({ task, index }: { task: Task; index: number })
 
   return (
     <div
+      data-task-id={task.id}
       draggable={!renaming}
       onDragStart={onDragStart}
       onDragEnd={() => delete document.documentElement.dataset.dragging}

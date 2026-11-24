@@ -35,6 +35,7 @@ import TaskCard, { TASK_DRAG_TYPE } from '../components/TaskCard';
 import ScrollRow from '../components/ScrollRow';
 import QuickAdd from '../components/QuickAdd';
 import { useWide } from '../hooks/useWide';
+import { useMarquee } from '../hooks/useMarquee';
 import type { Task } from '../../../lib/types';
 
 function Pill({
@@ -187,6 +188,8 @@ export default function Dashboard() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
+  // Drag a box over tasks from empty space to select them, like a file manager.
+  const marquee = useMarquee({ selected: app.selected, setSelected: app.setSelected, clear: app.clearSelection });
   useEffect(() => {
     if (!sortOpen) return;
     const close = (e: Event) => {
@@ -573,7 +576,18 @@ export default function Dashboard() {
 
       )}
 
-      <div className={cx('hide-scrollbar min-h-0 flex-1 overflow-y-auto px-6 pb-24', wide ? 'mt-3' : 'mt-4')}>
+      <div
+        ref={marquee.ref}
+        onPointerDown={marquee.onPointerDown}
+        className={cx('hide-scrollbar relative min-h-0 flex-1 overflow-y-auto px-6 pb-24', wide ? 'mt-3' : 'mt-4')}
+      >
+        {marquee.box && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute z-20 rounded-[3px] border border-acc/70 bg-acc/[.12]"
+            style={marquee.box}
+          />
+        )}
         {app.visibleTasks.length === 0 ? (
           <EmptyState icon={empty.icon} title={empty.title} sub={empty.sub}>
             {app.tasks.length === 0 && !app.query && (
