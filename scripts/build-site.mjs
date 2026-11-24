@@ -170,6 +170,23 @@ if (!Object.keys(platforms).length) {
   }
 }
 
+// A Windows-only release: keep offering the Mac download that is already published.
+// It stays out of this version's latest.json, so Mac apps just stay on their version
+// (listing the older build there would make them "update" to it again and again).
+if (Object.keys(platforms).length && !dl.mac) {
+  const live = await fetch(`${SITE}/desktop/latest.json`, { cache: 'no-store' })
+    .then(r => (r.ok ? r.json() : null))
+    .catch(() => null);
+  const v = live?.platforms?.['darwin-aarch64'] && live.version;
+  const r = v && (await fetch(`${SITE}/desktop/smart-tasks-${v}-mac.dmg`).catch(() => null));
+  if (r?.ok) {
+    const buf = Buffer.from(await r.arrayBuffer());
+    for (const n of [`smart-tasks-${v}-mac.dmg`, 'smart-tasks-mac-latest.dmg']) writeFileSync(join(deskOut, n), buf);
+    dl.mac = { href: `/desktop/smart-tasks-${v}-mac.dmg`, size: `${(buf.length / 1024 / 1024).toFixed(1)} MB` };
+    console.warn(`Keeping the published Mac app ${v} on the download page (no macOS ${version} build here).`);
+  }
+}
+
 // The updater's manifest lists whichever platforms are present.
 if (Object.keys(platforms).length) {
   writeFileSync(
