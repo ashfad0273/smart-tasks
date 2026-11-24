@@ -26,10 +26,13 @@ html.desktop #root {
     padding-inline: max(24px, calc((100% - 440px) / 2));
   }
   /* Bottom sheets (edit task) become a centred panel instead of a 1000px-wide slab. */
+  /* left/right 0 + a fixed width + auto margins centres it at any window width.
+     (The old left: 50% + margin-left: min(-280px, -50%) pulled it to the left
+     edge once the window was wider than 560px.) */
   html.desktop .st-sheet {
-    left: 50%;
-    right: auto;
+    left: 0;
+    right: 0;
     width: min(560px, 100%);
-    margin-left: min(-280px, -50%);
+    margin-inline: auto;
   }
 }
