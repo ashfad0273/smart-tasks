@@ -2,6 +2,19 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## 1.7.0 - 2026-11-24
+
+### Added
+- **A bigger desktop app.** On Mac and Windows, a wide window gets a sidebar with search, All tasks, Today, Upcoming, From AI, Completed, your categories, Notifications, History, Archive, AI agents and Settings. Tasks open in a side panel with their own history and a Duplicate button. Settings becomes a full page with sections and stats, and the app can open at login. The browser extension keeps its compact layout.
+- **Named AI keys.** Create a separate key for each AI app (for example Claude Code or Cursor), rename or revoke each one, and see in History, notifications and each task which one made a change.
+- **OK, send to AI.** Tasks an agent creates get a button to hand them back to that agent, with a plain OK or your own written answer. The agent picks it up, does the work and reports back on the task.
+- **Select several tasks.** Cmd or Ctrl click, Shift click or Cmd/Ctrl + A to select tasks, then mark them done, move, archive or delete them together. Drag tasks onto a category to move them.
+- **Notifications screen.** Agent notifications are kept behind the bell icon instead of in History.
+
+### Fixed
+- Changes an agent makes to a task you have open are no longer overwritten by the editor.
+- In the desktop app, the task editor and the new-task box stay a sensible size on wide windows.
+
 ## 1.6.1 - 2026-11-24
 
 ### Added
