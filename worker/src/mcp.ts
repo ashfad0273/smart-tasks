@@ -450,10 +450,13 @@ const scopeArg = (a: Record<string, unknown>) => (typeof a.scope === 'string' &&
 type Src = { agent: string; session: string | null; scope?: string | null };
 
 /** Returned whenever an agent puts an OK button up: the answer arrives in the app, and nothing wakes the agent by itself. */
+const WATCH = 'https://smart-tasks.ashfadhossain0.workers.dev/smart-tasks-watch.mjs';
 const WAIT_HINT =
-  'The user answers this in the Smart Tasks app, and nothing wakes you when they do. Before ending your turn, schedule a check: ' +
-  'in Claude Code create a recurring job (CronCreate, every 5 minutes) or ask the user to run `/loop 5m check Smart Tasks for approved tasks`; ' +
-  'each check calls list_requests, then claim_request and finish_request. Also tell the user they can just say "check Smart Tasks" here.';
+  'The user answers this in the Smart Tasks app, and nothing wakes you when they do. Before ending your turn, start watching: ' +
+  'in Claude Code run `node ~/.claude/tools/smart-tasks-watch.mjs` with Bash run_in_background (add --scope <scope> if you set one; ' +
+  `if the file is missing, download it first: curl -fsSL ${WATCH} -o ~/.claude/tools/smart-tasks-watch.mjs). ` +
+  'It uses no tokens and exits, waking you, when the user approves something; handle the requests it prints (claim_request, do it, finish_request) and start it again. ' +
+  'Elsewhere, check list_requests every few minutes, and tell the user they can just say "check Smart Tasks".';
 
 function approvalArg(v: unknown): Approval | null {
   try {
@@ -882,7 +885,7 @@ async function handle(ctx: Ctx, msg: RpcMsg): Promise<object | null> {
           'Prefer archive over delete when something just needs to be out of the way. ' +
           'Pass your session id as `session` (and a `scope`, e.g. repo folder plus template) to add_task so requests come back to you. ' +
           'To ask the user to OK something you can do, set `approval` on that subtask; only those items get an OK button. Never for steps only the user can do. ' +
-          'When the user OKs (plain, a choice, or their own answer, as userAnswer), it shows in list_requests: check it when you start and periodically (e.g. `/loop 5m check Smart Tasks for approved tasks`), ' +
+          `When the user OKs (plain, a choice, or their own answer, as userAnswer), it shows in list_requests: check it when you start; while waiting, in Claude Code run \`node ~/.claude/tools/smart-tasks-watch.mjs\` in the background (it wakes you when the user approves; download from ${WATCH} if missing), elsewhere check periodically. ` +
           'claim_request before working, and finish_request with a short result when done. ' +
           `The user controls what agents may do; right now: ${Object.entries(ctx.perms).map(([k, v]) => `${k} ${v ? 'on' : 'off'}`).join(', ')}.`,
       });

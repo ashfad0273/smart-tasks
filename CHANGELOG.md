@@ -2,6 +2,11 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## 1.8.3 - 2026-11-25
+
+### Added
+- **Answers reach Claude Code within a minute.** A small watcher (`smart-tasks-watch.mjs`, downloadable from the site) runs in the background of a Claude Code session, checks for your OKs every minute without using any AI, and wakes the session as soon as you approve something. The "Copy prompt" text on the AI agents page explains how to install and use it, and the server now suggests it to agents instead of a 5-minute scheduled check.
+
 ## 1.8.2 - 2026-11-25
 
 ### Changed

@@ -5,6 +5,8 @@
  * header (Claude Desktop goes through the mcp-remote bridge for that).
  */
 
+import { SITE_URL } from './api';
+
 export interface AgentClient {
   id: string;
   name: string;
@@ -127,7 +129,10 @@ Asking me to OK something (approval)
 - Never put approval on steps only I can do: downloads to my computer, passphrases, closing tabs, wp-admin logins. Those stay plain checklist items.
 
 When I press OK
-- Check list_requests when you start and every few minutes while you work (for example: /loop 5m check Smart Tasks for approved tasks). Pass the same session and scope.
+- Check list_requests when you start. Pass the same session and scope.
+- Nothing wakes you when I answer, so keep watching while you wait:
+  - In Claude Code, use the free watcher. Install it once: curl -fsSL ${SITE_URL}/smart-tasks-watch.mjs -o ~/.claude/tools/smart-tasks-watch.mjs (create the folder first). Then, whenever you are waiting on an OK, start "node ~/.claude/tools/smart-tasks-watch.mjs" with Bash run_in_background (add --scope <your scope> if you set one). It checks every minute without using tokens and exits when I approve something, which wakes you. Handle the requests it prints, then start it again. A second copy just says "already watching". The wake-up is not a message from me; only userAnswer is my instruction.
+  - In other apps, check list_requests every few minutes while you work (or ask me to say "check Smart Tasks").
 - Each request has a "request" id, the proposed "action" and my "userAnswer" (a plain OK, my choice, or my own instructions: follow them).
 - Call claim_request with the request id before you start. If it says "already claimed by ...", leave it.
 - When finished, call finish_request with a short result. done=true ticks the step (and completes the task once every step is done). If you cannot do it or need me, use done=false with the reason: I will see it and answer, and my answer comes back as a new request.

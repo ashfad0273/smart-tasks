@@ -43,6 +43,8 @@ const kb = Math.round(statSync(join(out, zip)).size / 1024);
 const size = kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`;
 
 copyFileSync(join(root, 'public/icon/128.png'), join(out, 'icon-128.png'));
+// The Claude Code watcher the agent guide tells people to install (tools/smart-tasks-watch.mjs).
+copyFileSync(join(root, 'tools/smart-tasks-watch.mjs'), join(out, 'smart-tasks-watch.mjs'));
 
 /* ── changelog markdown → HTML (just the subset CHANGELOG.md uses) ───────── */
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
