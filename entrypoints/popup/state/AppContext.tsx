@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api, ApiError, type AuthResult, type ServerConfig } from '../../../lib/api';
 import { completeSignIn } from '../../../lib/auth';
 import { isExtension, onStorageChange, storageGet, storageSet } from '../../../lib/ext';
-import { baseKey, ONBOARDED_KEY, outboxKey, REGISTRY_KEY, statusKey, TOUR_KEY } from '../../../lib/keys';
+import { baseKey, ONBOARDED_KEY, outboxKey, REGISTRY_KEY, statusKey, SORT_KEY, TOUR_KEY } from '../../../lib/keys';
 import {
   defaultCategoryOps,
   activeTasks,
@@ -22,6 +22,8 @@ import { cheer, descErr, friendlyAuthError, hueFromString } from '../../../lib/u
 
 export type Screen = 'welcome' | 'login' | 'signup' | 'reset' | 'dashboard' | 'categories' | 'settings' | 'agent' | 'devices' | 'activity' | 'archive';
 export type Tab = 'all' | 'pending' | 'completed';
+/** due = by due date in Overdue/Today/... groups (default). */
+export type SortBy = 'due' | 'updated' | 'added' | 'priority';
 export type ToastKind = 'info' | 'error' | 'success';
 export interface Toast {
   id: number;
@@ -91,6 +93,8 @@ interface AppCtx {
   setFilter(f: string): void;
   tab: Tab;
   setTab(t: Tab): void;
+  sortBy: SortBy;
+  setSortBy(s: SortBy): void;
   query: string;
   setQuery(q: string): void;
   visibleTasks: Task[];
@@ -153,6 +157,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [filter, setFilter] = useState('all');
   const [tab, setTab] = useState<Tab>('pending');
+  const [sortBy, setSortByRaw] = useState<SortBy>('due');
+  useEffect(() => {
+    void storageGet<SortBy>(SORT_KEY, 'due').then(s => setSortByRaw(['due', 'updated', 'added', 'priority'].includes(s) ? s : 'due'));
+  }, []);
+  const setSortBy = useCallback((s: SortBy) => {
+    setSortByRaw(s);
+    void storageSet(SORT_KEY, s);
+  }, []);
   const [query, setQuery] = useState('');
   const [celebrate, setCelebrate] = useState(0);
 
@@ -692,10 +704,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (tab === 'pending') list = list.filter(isPending);
     if (tab === 'completed') list = list.filter(t => !!t.completedAt);
     const pr = { high: 0, med: 1, low: 2 } as const;
+    const due = (t: Task) => t.dueAt ?? Number.MAX_SAFE_INTEGER;
     return [...list].sort((a, b) => {
       const ac = a.completedAt ? 1 : 0;
       const bc = b.completedAt ? 1 : 0;
       if (ac !== bc) return ac - bc;
+      if (sortBy === 'updated') return b.updatedAt - a.updatedAt;
+      if (sortBy === 'added') return b.createdAt - a.createdAt;
+      if (sortBy === 'priority') {
+        const ap = a.priority ? pr[a.priority] : 3;
+        const bp = b.priority ? pr[b.priority] : 3;
+        if (ap !== bp) return ap - bp;
+        if (ac === 1) return (b.completedAt ?? 0) - (a.completedAt ?? 0);
+        return due(a) !== due(b) ? due(a) - due(b) : b.order - a.order;
+      }
       if (ac === 1) return (b.completedAt ?? 0) - (a.completedAt ?? 0);
       const ad = a.dueAt ?? Number.MAX_SAFE_INTEGER;
       const bd = b.dueAt ?? Number.MAX_SAFE_INTEGER;
@@ -705,7 +727,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (ap !== bp) return ap - bp;
       return b.order - a.order;
     });
-  }, [inFilter, tab]);
+  }, [inFilter, tab, sortBy]);
 
   const syncState: SyncState = !account
     ? 'synced'
@@ -780,6 +802,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setFilter,
     tab,
     setTab,
+    sortBy,
+    setSortBy,
     query,
     setQuery,
     visibleTasks,

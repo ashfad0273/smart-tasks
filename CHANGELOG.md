@@ -2,6 +2,12 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## 1.6.1 - 2026-11-24
+
+### Added
+- **Sort your list.** A sort button next to search orders tasks by due date (the usual groups), last updated, newest or priority. Smart Tasks remembers your choice.
+- **AI can manage subtasks.** Agents can add, tick off, untick, rename, move and delete checklist items.
+
 ## 1.6.0 - 2026-11-24
 
 ### Added

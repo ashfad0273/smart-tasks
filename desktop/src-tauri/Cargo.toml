@@ -1,6 +1,6 @@
 [package]
 name = "smart-tasks"
-version = "1.6.0"
+version = "1.6.1"
 description = "Smart Tasks for Windows and macOS"
 edition = "2021"
 publish = false

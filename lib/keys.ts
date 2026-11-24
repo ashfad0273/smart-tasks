@@ -27,3 +27,5 @@ export const noticesSeenKey = (uid: string) => `st-notices-seen:${uid}`;
 export const inboxKey = (uid: string) => `st-inbox:${uid}`;
 /** The first-run tour: `{ step }` while it is in progress (it resumes there), null once finished. */
 export const TOUR_KEY = 'st-tour';
+/** Dashboard sort order (SortBy in the popup), remembered across opens. */
+export const SORT_KEY = 'st-sort';

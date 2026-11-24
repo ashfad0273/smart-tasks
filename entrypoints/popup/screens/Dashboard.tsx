@@ -13,6 +13,8 @@ import {
   Settings as SettingsIcon,
   Sparkles,
   ArrowUpCircle,
+  ArrowDownUp,
+  Check,
   X,
 } from 'lucide-react';
 import { cx, startOfDay } from '../../../lib/utils';
@@ -20,7 +22,7 @@ import { onStorageChange, storageGet, storageSet } from '../../../lib/ext';
 import { inboxKey, OPEN_SCREEN_KEY, UPDATE_KEY } from '../../../lib/keys';
 import { newer, type UpdateInfo } from '../../../lib/updater';
 import type { InboxItem } from '../../../lib/api';
-import { useApp, type Tab } from '../state/AppContext';
+import { useApp, type SortBy, type Tab } from '../state/AppContext';
 import Confetti from '../components/Confetti';
 import EmptyState from '../components/EmptyState';
 import SyncBadge from '../components/SyncBadge';
@@ -51,8 +53,39 @@ function Pill({ active, onClick, children, color }: { active: boolean; onClick: 
 
 type Section = { key: string; label: string; tone: string; tasks: Task[] };
 
-/** Splits the (already due-sorted) list into friendly buckets. */
-function sectionize(list: Task[]): Section[] {
+const SORTS: Array<{ id: SortBy; label: string; sub: string }> = [
+  { id: 'due', label: 'Due date', sub: 'Overdue, today, tomorrow...' },
+  { id: 'updated', label: 'Last updated', sub: 'Recently edited first' },
+  { id: 'added', label: 'Newest', sub: 'Recently added first' },
+  { id: 'priority', label: 'Priority', sub: 'High, medium, low' },
+];
+
+/** Splits the (already sorted) list into friendly buckets for the chosen order. */
+function sectionize(list: Task[], sortBy: SortBy): Section[] {
+  if (sortBy !== 'due') {
+    const pmeta: Record<string, [string, string]> = {
+      high: ['High priority', '#ef4444'],
+      med: ['Medium priority', '#f59e0b'],
+      low: ['Low priority', '#22c55e'],
+      none: ['No priority', '#798a8e'],
+      updated: ['Last updated', '#3fd1c5'],
+      added: ['Newest first', '#3fd1c5'],
+      done: ['Done', '#22c55e'],
+    };
+    const key = (t: Task) => (t.completedAt ? 'done' : sortBy === 'priority' ? (t.priority ?? 'none') : sortBy);
+    const out: Section[] = [];
+    for (const t of list) {
+      const k = key(t);
+      const last = out[out.length - 1];
+      if (last?.key === k) last.tasks.push(t);
+      else out.push({ key: k, label: pmeta[k][0], tone: pmeta[k][1], tasks: [t] });
+    }
+    return out;
+  }
+  return sectionizeByDue(list);
+}
+
+function sectionizeByDue(list: Task[]): Section[] {
   const today = startOfDay(Date.now()).getTime();
   const D = 86_400_000;
   const now = Date.now();
@@ -102,6 +135,24 @@ export default function Dashboard() {
   const app = useApp();
   const [adding, setAdding] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!sortOpen) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent) {
+        if (e.key !== 'Escape') return;
+        e.stopPropagation(); // Escape closes the menu, not the popup screen
+      } else if (sortRef.current?.contains(e.target as Node)) return;
+      setSortOpen(false);
+    };
+    window.addEventListener('pointerdown', close, true);
+    window.addEventListener('keydown', close, true);
+    return () => {
+      window.removeEventListener('pointerdown', close, true);
+      window.removeEventListener('keydown', close, true);
+    };
+  }, [sortOpen]);
   const searchRef = useRef<HTMLInputElement>(null);
   const [party, setParty] = useState(0);
   const prevPending = useRef(app.counts.pending);
@@ -163,7 +214,7 @@ export default function Dashboard() {
     return onStorageChange(keys => keys.includes(UPDATE_KEY) && void read());
   }, []);
 
-  const sections = useMemo(() => sectionize(app.visibleTasks), [app.visibleTasks]);
+  const sections = useMemo(() => sectionize(app.visibleTasks, app.sortBy), [app.visibleTasks, app.sortBy]);
   const streak = useMemo(() => streakOf(app.tasks), [app.tasks]);
   const doneToday = useMemo(() => {
     const t0 = startOfDay(Date.now()).getTime();
@@ -360,6 +411,50 @@ export default function Dashboard() {
                   {t.label} <span className={app.tab === t.id ? 'text-acc/70' : 'text-mut/50'}>{t.count}</span>
                 </button>
               ))}
+            </div>
+            <div ref={sortRef} className="relative">
+              <button
+                aria-label={`Sort: ${SORTS.find(s => s.id === app.sortBy)?.label}`}
+                title={`Sort: ${SORTS.find(s => s.id === app.sortBy)?.label}`}
+                aria-haspopup="menu"
+                aria-expanded={sortOpen}
+                onClick={() => setSortOpen(o => !o)}
+                className={cx(
+                  'press rounded-full border p-3 hover:text-acc',
+                  app.sortBy !== 'due' ? 'border-acc/30 bg-acc/10 text-acc' : 'border-white/[.02] bg-black/15 text-mut',
+                )}
+              >
+                <ArrowDownUp size={13} />
+              </button>
+              {sortOpen && (
+                <div
+                  role="menu"
+                  className="anim-pop absolute right-0 top-full z-30 mt-2 w-52 origin-top-right rounded-2xl border border-white/[.06] bg-surface p-1.5 shadow-[0_16px_40px_-12px_rgba(0,0,0,.7)]"
+                >
+                  <p className="px-2.5 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-mut/70">Sort by</p>
+                  {SORTS.map(s => (
+                    <button
+                      key={s.id}
+                      role="menuitemradio"
+                      aria-checked={app.sortBy === s.id}
+                      onClick={() => {
+                        app.setSortBy(s.id);
+                        setSortOpen(false);
+                      }}
+                      className={cx(
+                        'press flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-white/[.04]',
+                        app.sortBy === s.id && 'bg-acc/[.07]',
+                      )}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className={cx('block text-[12.5px] font-medium', app.sortBy === s.id ? 'text-acc' : 'text-txt')}>{s.label}</span>
+                        <span className="block text-[10.5px] text-mut">{s.sub}</span>
+                      </span>
+                      {app.sortBy === s.id && <Check size={13} className="shrink-0 text-acc" />}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <button
               aria-label="Search (press /)"
