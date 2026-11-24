@@ -4,9 +4,12 @@ import type { AccountInfo } from '../../../lib/types';
 import { cx } from '../../../lib/utils';
 import { useApp } from '../state/AppContext';
 import Avatar from './Avatar';
+import { useWide } from '../hooks/useWide';
 
 export default function SwitchAccountModal() {
   const app = useApp();
+  // Desktop sidebar: the profile is top left, so the menu drops from there.
+  const wide = useWide();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && app.setSwitcherOpen(false);
@@ -35,7 +38,11 @@ export default function SwitchAccountModal() {
   return (
     <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Switch account">
       <div className="absolute inset-0 bg-black/40 animate-[fadeIn_.12s_ease-out]" onClick={() => app.setSwitcherOpen(false)} />
-      <div className="anim-pop absolute right-4 top-14 w-[272px] origin-top-right overflow-hidden rounded-2xl border border-white/[.08] bg-surface shadow-[0_20px_50px_rgba(0,0,0,.55)]">
+      <div className={cx(
+          'anim-pop absolute w-[272px] overflow-hidden rounded-2xl border border-white/[.08] bg-surface shadow-[0_20px_50px_rgba(0,0,0,.55)]',
+          wide ? 'left-3 top-[58px] origin-top-left' : 'right-4 top-14 origin-top-right',
+        )}
+      >
         <div className="hide-scrollbar max-h-[300px] overflow-y-auto p-1.5">
           {app.accounts.map(a => {
             const active = a.uid === app.account?.uid;
