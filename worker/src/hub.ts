@@ -81,6 +81,8 @@ export class UserHub extends DurableObject<Env> {
     if (!cols('notices').has('sender')) this.sql.exec(`ALTER TABLE notices ADD COLUMN sender TEXT`);
     // Text the notification's "Copy prompt" button copies.
     if (!cols('notices').has('copy')) this.sql.exec(`ALTER TABLE notices ADD COLUMN copy TEXT`);
+    // The task a notification is about: clicking it opens that task.
+    if (!cols('notices').has('task_id')) this.sql.exec(`ALTER TABLE notices ADD COLUMN task_id TEXT`);
     // Requests already reported as unclaimed (by request id), so each is reported once.
     this.sql.exec(`CREATE TABLE IF NOT EXISTS nudged (rid TEXT PRIMARY KEY, at INTEGER NOT NULL)`);
     // Phones (the installed web app) that get push notifications, and when.
@@ -366,7 +368,7 @@ export class UserHub extends DurableObject<Env> {
     const done = new Set(this.sql.exec<{ rid: string }>(`SELECT rid FROM nudged`).toArray().map(r => r.rid));
     let next = Infinity;
     let sent = false;
-    const fresh: Array<{ id: number; title: string; message: string; copy: string }> = [];
+    const fresh: Array<{ id: number; title: string; message: string; copy: string; taskId: string }> = [];
     for (const t of this.list('task') as TaskRec[]) {
       if (t.completedAt != null || t.archivedAt != null) continue;
       for (const { sub, req } of requestsOf(t)) {
@@ -385,14 +387,15 @@ export class UserHub extends DurableObject<Env> {
         };
         const nid = this.sql
           .exec<{ id: number }>(
-            `INSERT INTO notices (title, message, url, created_at, sender, copy) VALUES (?, ?, NULL, ?, 'Smart Tasks', ?) RETURNING id`,
+            `INSERT INTO notices (title, message, url, created_at, sender, copy, task_id) VALUES (?, ?, NULL, ?, 'Smart Tasks', ?, ?) RETURNING id`,
             n.title,
             n.message,
             now,
             n.copy,
+            t.id,
           )
           .one().id;
-        fresh.push({ id: nid, ...n });
+        fresh.push({ id: nid, ...n, taskId: t.id });
         this.sql.exec(`INSERT INTO nudged (rid, at) VALUES (?, ?) ON CONFLICT (rid) DO NOTHING`, req.id, now);
         sent = true;
       }
@@ -443,7 +446,7 @@ export class UserHub extends DurableObject<Env> {
   /* ── agent notifications ─────────────────────────────────────────── */
 
   /** Queue a desktop notification from an AI agent. Devices fetch it on their next check. */
-  notify(n: { title: string; message: string; url: string | null }, who: string | null = null): { id: number } | { error: string } {
+  notify(n: { title: string; message: string; url: string | null; taskId?: string | null }, who: string | null = null): { id: number } | { error: string } {
     const now = Date.now();
     const recent = this.sql
       .exec<{ n: number }>(`SELECT COUNT(*) AS n FROM notices WHERE created_at > ?`, now - 3600_000)
@@ -451,17 +454,18 @@ export class UserHub extends DurableObject<Env> {
     if (recent >= NOTICE_HOURLY_LIMIT) return { error: `Limit of ${NOTICE_HOURLY_LIMIT} notifications per hour reached. Try again later.` };
     const id = this.sql
       .exec<{ id: number }>(
-        `INSERT INTO notices (title, message, url, created_at, sender) VALUES (?, ?, ?, ?, ?) RETURNING id`,
+        `INSERT INTO notices (title, message, url, created_at, sender, task_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
         n.title,
         n.message,
         n.url,
         now,
         who,
+        n.taskId ?? null,
       )
       .one().id;
     this.sql.exec(`DELETE FROM notices WHERE created_at < ?`, now - 7 * 86_400_000);
     this.who = who;
-    this.log(now, 'notice', null, n.title, 'agent', n.message);
+    this.log(now, 'notice', n.taskId ?? null, n.title, 'agent', n.message);
     this.ping({ type: 'notice' });
     this.ctx.waitUntil(this.pushOut({ id, ...n, from: who }));
     return { id };
@@ -470,17 +474,17 @@ export class UserHub extends DurableObject<Env> {
   /** Notifications newer than `after` (a notice id) from the last day. */
   notices(after: number): {
     latest: number;
-    notices: Array<{ id: number; title: string; message: string; url: string | null; createdAt: number; from: string | null; copy?: string }>;
+    notices: Array<{ id: number; title: string; message: string; url: string | null; createdAt: number; from: string | null; copy?: string; taskId?: string }>;
   } {
     const latest = this.sql.exec<{ v: number | null }>(`SELECT MAX(id) AS v FROM notices`).one().v ?? 0;
     const notices = this.sql
-      .exec<{ id: number; title: string; message: string; url: string | null; created_at: number; sender: string | null; copy: string | null }>(
-        `SELECT id, title, message, url, created_at, sender, copy FROM notices WHERE id > ? AND created_at > ? ORDER BY id LIMIT 20`,
+      .exec<{ id: number; title: string; message: string; url: string | null; created_at: number; sender: string | null; copy: string | null; task_id: string | null }>(
+        `SELECT id, title, message, url, created_at, sender, copy, task_id FROM notices WHERE id > ? AND created_at > ? ORDER BY id LIMIT 20`,
         after,
         Date.now() - 86_400_000,
       )
       .toArray()
-      .map(r => ({ id: r.id, title: r.title, message: r.message, url: r.url, createdAt: r.created_at, from: r.sender, ...(r.copy ? { copy: r.copy } : {}) }));
+      .map(r => ({ id: r.id, title: r.title, message: r.message, url: r.url, createdAt: r.created_at, from: r.sender, ...(r.copy ? { copy: r.copy } : {}), ...(r.task_id ? { taskId: r.task_id } : {}) }));
     return { latest, notices };
   }
 
@@ -667,7 +671,7 @@ export class UserHub extends DurableObject<Env> {
   }
 
   /** Send a notice to every phone whose setting says it should get it now (all of them for a test). */
-  async pushOut(n: { id: number; title: string; message: string; url: string | null; copy?: string; from?: string | null }, test = false): Promise<number> {
+  async pushOut(n: { id: number; title: string; message: string; url: string | null; copy?: string; from?: string | null; taskId?: string | null }, test = false): Promise<number> {
     const pub = this.env.VAPID_PUBLIC;
     const priv = this.env.VAPID_PRIVATE;
     if (!pub || !priv) return 0;

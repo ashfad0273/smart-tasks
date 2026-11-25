@@ -37,7 +37,7 @@ self.addEventListener('push', e => {
       tag: n.tag || `notice-${n.id || Date.now()}`,
       icon: 'icon-512.png',
       badge: 'badge-96.png',
-      data: { url: n.url || null, push: true },
+      data: { url: n.url || null, taskId: n.taskId || null, push: true },
     }),
   );
 });
@@ -49,6 +49,15 @@ self.addEventListener('notificationclick', e => {
     (async () => {
       const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       const app = wins.find(w => new URL(w.url).pathname.startsWith(new URL('./', location.href).pathname));
+      // About a task: open it in the app.
+      if (data.push && data.taskId) {
+        if (app) {
+          await app.focus();
+          app.postMessage({ type: 'st-open-task', id: data.taskId });
+          return;
+        }
+        return self.clients.openWindow(`./?task=${encodeURIComponent(data.taskId)}`);
+      }
       if (data.push && data.url) return self.clients.openWindow(data.url);
       if (app) {
         await app.focus();

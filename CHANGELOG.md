@@ -2,6 +2,16 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## 1.8.6 - 2026-11-25
+
+### Added
+- **Delete with the keyboard.** Select tasks (Ctrl/Cmd-click, or Shift-click for a range) and press Delete or Backspace. You're asked before anything is deleted.
+- **Select categories like tasks.** In the sidebar and on the Categories screen, Ctrl/Cmd-click or Shift-click categories to select several, then archive or delete them together (or press Delete). Their tasks become uncategorized, not deleted. Esc clears the selection.
+- **Notifications open their task.** Clicking a reminder, or an AI agent message about a task, opens that task, on the computer and on the phone. The Notifications screen has an **Open task** button too. Agents can now attach a task to a message.
+
+### Changed
+- **Easier subtasks.** Click a long subtask to read all of it (click again to fold it). Hover to see a pencil for editing, or double-click; the editor grows to show the whole text. The progress ring next to "N of M done" is gone.
+
 ## 1.8.5 - 2026-11-25
 
 ### Added

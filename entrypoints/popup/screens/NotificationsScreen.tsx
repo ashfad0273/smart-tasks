@@ -141,6 +141,20 @@ export default function NotificationsScreen() {
                                 <span className="truncate text-pop">{n.from}</span>
                               </>
                             )}
+                            {n.taskId && app.allTasks.some(t => t.id === n.taskId) && (
+                              <>
+                                <span className="text-mut/40">·</span>
+                                <button
+                                  onClick={() => {
+                                    app.setScreen('dashboard');
+                                    app.openEdit(n.taskId!);
+                                  }}
+                                  className="inline-flex items-center gap-0.5 font-semibold text-acc hover:underline"
+                                >
+                                  Open task
+                                </button>
+                              </>
+                            )}
                             {n.url && (
                               <>
                                 <span className="text-mut/40">·</span>

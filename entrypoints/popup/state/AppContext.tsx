@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api, ApiError, type AuthResult, type ServerConfig } from '../../../lib/api';
 import { completeSignIn } from '../../../lib/auth';
 import { isExtension, onStorageChange, storageGet, storageSet } from '../../../lib/ext';
-import { baseKey, ONBOARDED_KEY, outboxKey, REGISTRY_KEY, statusKey, SORT_KEY, TOUR_KEY } from '../../../lib/keys';
+import { baseKey, ONBOARDED_KEY, OPEN_TASK_KEY, outboxKey, REGISTRY_KEY, statusKey, SORT_KEY, TOUR_KEY } from '../../../lib/keys';
 import {
   defaultCategoryOps,
   activeTasks,
@@ -117,7 +117,8 @@ interface AppCtx {
   clearCompleted(): Promise<void>;
   createCategory(input: { name: string; color: string }): Promise<string | null>;
   updateCategory(id: string, patch: { name?: string; color?: string }): Promise<void>;
-  deleteCategory(id: string): Promise<void>;
+  /** One id or several (multi-select): one write, one toast. */
+  deleteCategory(id: string | string[]): Promise<void>;
   /** Multi-select (Cmd/Ctrl-click toggles, Shift-click selects a range). */
   selected: string[];
   selectTask(id: string, how: 'toggle' | 'range' | 'only'): void;
@@ -130,7 +131,7 @@ interface AppCtx {
   deleteTasks(ids: string[]): Promise<void>;
   archiveTask(id: string, archived?: boolean): Promise<void>;
   duplicateTask(id: string): Promise<void>;
-  archiveCategory(id: string, archived?: boolean): Promise<void>;
+  archiveCategory(id: string | string[], archived?: boolean): Promise<void>;
 
   /** Bumped every time a task gets completed — drives the confetti. */
   celebrate: number;
@@ -737,10 +738,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const archiveCategory = useCallback<AppCtx['archiveCategory']>(
     async (id, archived = true) => {
-      const set = (on: boolean) => write([{ kind: 'category', id, op: 'upsert', data: { archivedAt: on ? Date.now() : null } }]);
+      const ids = Array.isArray(id) ? id : [id];
+      const many = ids.length > 1 ? `${ids.length} categories` : 'Category';
+      const set = (on: boolean) =>
+        write(ids.map(i => ({ kind: 'category' as const, id: i, op: 'upsert' as const, data: { archivedAt: on ? Date.now() : null } })));
       await set(archived);
-      if (archived && filter === id) setFilter('all');
-      showToast(archived ? 'Category archived with its tasks' : 'Category restored', archived ? 'info' : 'success', {
+      if (archived && ids.includes(filter)) setFilter('all');
+      showToast(archived ? `${many} archived with ${ids.length > 1 ? 'their' : 'its'} tasks` : `${many} restored`, archived ? 'info' : 'success', {
         label: 'Undo',
         run: () => void set(!archived),
       });
@@ -767,9 +771,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deleteCategory = useCallback<AppCtx['deleteCategory']>(
     async id => {
-      await write([{ kind: 'category', id, op: 'delete' }]);
-      if (filter === id) setFilter('all');
-      showToast('Category deleted — its tasks are now uncategorized');
+      const ids = Array.isArray(id) ? id : [id];
+      await write(ids.map(i => ({ kind: 'category' as const, id: i, op: 'delete' as const })));
+      if (ids.includes(filter)) setFilter('all');
+      showToast(ids.length > 1 ? `${ids.length} categories deleted — their tasks are now uncategorized` : 'Category deleted — its tasks are now uncategorized');
     },
     [filter, showToast, write],
   );
@@ -920,6 +925,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setScreen = useCallback((s: Screen) => setScreenRaw(s), []);
   const openEdit = useCallback((id: string) => setEditTaskId(id), []);
   const closeEdit = useCallback(() => setEditTaskId(null), []);
+
+  // A clicked notification asks to open its task: show it once the task has synced here.
+  const [openTaskReq, setOpenTaskReq] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => void storageGet<string | null>(OPEN_TASK_KEY, null).then(id => id && setOpenTaskReq(id));
+    read();
+    return onStorageChange(keys => keys.includes(OPEN_TASK_KEY) && read());
+  }, []);
+  useEffect(() => {
+    if (!openTaskReq || !account || !data.tasks[openTaskReq]) return;
+    setOpenTaskReq(null);
+    void storageSet(OPEN_TASK_KEY, null);
+    setScreenRaw(s => (s === 'login' || s === 'welcome' || s === 'signup' ? s : 'dashboard'));
+    setEditTaskId(openTaskReq);
+  }, [openTaskReq, account, data.tasks]);
   const openCategoryModal = useCallback((m: CategoryModalState) => setCategoryModal(m), []);
   const closeCategoryModal = useCallback(() => setCategoryModal(null), []);
   const startAddAccount = useCallback(() => {

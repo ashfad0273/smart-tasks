@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, Bot, Check, ChevronDown, ChevronRight, Copy, ExternalLink, GripVertical, Plus, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Bot, Check, ChevronDown, ChevronRight, Copy, ExternalLink, GripVertical, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api, type ActivityEvent } from '../../../lib/api';
 import {
   addDays,
@@ -21,31 +21,6 @@ import { useApp } from '../state/AppContext';
 import Sheet from './Sheet';
 import { AiAsk, AiPanel, newRequest, subShape, taskApproval } from './AiRequest';
 import DueEditor from './DueEditor';
-
-/** Small donut showing how many subtasks are done. */
-function ProgressRing({ done, total }: { done: number; total: number }) {
-  const r = 7;
-  const c = 2 * Math.PI * r;
-  const pct = total ? done / total : 0;
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" className="shrink-0 -rotate-90" aria-hidden>
-      <circle cx="9" cy="9" r={r} fill="none" stroke="currentColor" strokeWidth="2.5" className="text-white/[.07]" />
-      <circle
-        cx="9"
-        cy="9"
-        r={r}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeDasharray={c}
-        strokeDashoffset={c * (1 - pct)}
-        className="text-acc transition-[stroke-dashoffset] duration-500"
-        opacity={pct ? 1 : 0}
-      />
-    </svg>
-  );
-}
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -172,6 +147,18 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
   const [newCat, setNewCat] = useState<string | null>(null);
   const [newSub, setNewSub] = useState('');
   const [editingSub, setEditingSub] = useState<string | null>(null);
+  // Subtasks shown in full (a click on a long one unfolds it).
+  const [openSubs, setOpenSubs] = useState<Set<string>>(() => new Set());
+  const toggleOpenSub = (id: string) =>
+    setOpenSubs(prev => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  const startSubEdit = (sub: Subtask) => {
+    setEditingSub(sub.id);
+    setEditSubText(sub.title);
+  };
   const [editSubText, setEditSubText] = useState('');
 
   const listRef = useRef<HTMLDivElement>(null);
@@ -476,7 +463,6 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
             {subtasks.length > 0 && (
               <>
                 <div className="flex items-center gap-2.5 px-3 pb-2 pt-2.5">
-                  <ProgressRing done={doneSubs} total={subtasks.length} />
                   <span className={cx('flex-1 text-[11.5px] font-semibold', doneSubs === subtasks.length ? 'text-acc' : 'text-txt/80')}>
                     {doneSubs === subtasks.length ? 'All done' : `${doneSubs} of ${subtasks.length} done`}
                   </span>
@@ -526,29 +512,59 @@ export default function EditTaskSheet({ docked = false }: { docked?: boolean }) 
                   )}
                 </button>
                 {editingSub === s.id ? (
-                  <input
+                  <textarea
                     autoFocus
+                    rows={1}
                     value={editSubText}
-                    onChange={e => setEditSubText(e.target.value)}
+                    // Grows with the text, so the whole subtask is visible while editing.
+                    ref={el => {
+                      if (!el) return;
+                      el.style.height = '0px';
+                      el.style.height = `${el.scrollHeight}px`;
+                    }}
+                    onFocus={e => e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length)}
+                    onChange={e => setEditSubText(e.target.value.replace(/\s*\n\s*/g, ' '))}
                     onBlur={commitSubEdit}
                     onKeyDown={e => {
-                      if (e.key === 'Enter') commitSubEdit();
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitSubEdit();
+                      }
                       if (e.key === 'Escape') {
                         e.stopPropagation();
                         setEditingSub(null);
                       }
                     }}
-                    className="-my-1 min-w-0 flex-1 rounded-lg border border-acc/50 bg-surface2 px-2 py-1 text-[12.5px] outline-none"
+                    aria-label="Edit subtask"
+                    className="-my-1 min-w-0 flex-1 resize-none overflow-hidden rounded-lg border border-acc/50 bg-surface2 px-2 py-1 text-[12.5px] leading-snug outline-none"
                   />
                 ) : (
                   <button
                     className="min-w-0 flex-1 text-left"
-                    onClick={() => {
-                      setEditingSub(s.id);
-                      setEditSubText(s.title);
-                    }}
+                    onClick={() => toggleOpenSub(s.id)}
+                    onDoubleClick={() => startSubEdit(s)}
+                    aria-expanded={openSubs.has(s.id)}
+                    title={openSubs.has(s.id) ? 'Click to fold, double-click to edit' : 'Click to see it all, double-click to edit'}
                   >
-                    <span title={s.title} className={cx('line-clamp-2 break-words text-[12.5px] leading-snug', s.done ? 'text-mut line-through decoration-mut/50' : 'text-txt/90')}>{s.title}</span>
+                    <span
+                      className={cx(
+                        'break-words text-[12.5px] leading-snug',
+                        openSubs.has(s.id) ? 'block' : 'line-clamp-2',
+                        s.done ? 'text-mut line-through decoration-mut/50' : 'text-txt/90',
+                      )}
+                    >
+                      {s.title}
+                    </span>
+                  </button>
+                )}
+                {editingSub !== s.id && (
+                  <button
+                    onClick={() => startSubEdit(s)}
+                    aria-label="Edit subtask"
+                    title="Edit"
+                    className="mt-px shrink-0 rounded p-0.5 text-mut/50 opacity-0 transition-opacity hover:text-acc focus:opacity-100 group-hover/sub:opacity-100 [@media(hover:none)]:opacity-100"
+                  >
+                    <Pencil size={12} />
                   </button>
                 )}
                 <button

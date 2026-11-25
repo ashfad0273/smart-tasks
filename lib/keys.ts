@@ -12,6 +12,8 @@ export const AGENT_SOUND_KEY = 'st-agent-sound';
 export const AGENT_CLIENT_KEY = 'st-agent-client';
 /** Set by the service worker when a notification click should land on a screen. */
 export const OPEN_SCREEN_KEY = 'st-open-screen';
+/** A task to open next time the app shows (set when a notification about it is clicked). */
+export const OPEN_TASK_KEY = 'st-open-task';
 /** Newer release found by the updater: UpdateInfo or null. */
 export const UPDATE_KEY = 'st-update';
 /** Set just before the updater reloads the extension: {from, to}. */

@@ -2,7 +2,7 @@ import { defineBackground } from 'wxt/utils/define-background';
 import { signInWithGoogle } from '../lib/auth';
 import { storageGet, storageSet } from '../lib/ext';
 import { api, SITE_URL, type InboxItem } from '../lib/api';
-import { AGENT_NOTIFY_KEY, AGENT_SOUND_KEY, inboxKey, NOTICE_LINKS_KEY, OPEN_SCREEN_KEY, UPDATE_KEY, UPDATE_NOTIFIED_KEY, UPDATED_KEY, noticesSeenKey, REGISTRY_KEY, REMINDERS_ENABLED_KEY, REMINDERS_KEY, REMINDERS_SENT_KEY, baseKey, outboxKey } from '../lib/keys';
+import { AGENT_NOTIFY_KEY, AGENT_SOUND_KEY, inboxKey, NOTICE_LINKS_KEY, OPEN_SCREEN_KEY, OPEN_TASK_KEY, UPDATE_KEY, UPDATE_NOTIFIED_KEY, UPDATED_KEY, noticesSeenKey, REGISTRY_KEY, REMINDERS_ENABLED_KEY, REMINDERS_KEY, REMINDERS_SENT_KEY, baseKey, outboxKey } from '../lib/keys';
 import { GRACE_MS, writeReminders, type Reminder } from '../lib/reminders';
 import { activeAccount, activeTasks, loadRegistry, mutate, newId, readView, sync } from '../lib/store';
 import { isSameDay } from '../lib/utils';
@@ -194,6 +194,7 @@ export default defineBackground(() => {
                 });
                 if (n.url) links[id] = n.url;
                 if (n.copy) links[`copy:${id}`] = n.copy;
+                if (n.taskId) links[`task:${id}`] = n.taskId;
               }
               await storageSet(NOTICE_LINKS_KEY, Object.fromEntries(Object.entries(links).slice(-50)));
               await playChime();
@@ -444,11 +445,14 @@ export default defineBackground(() => {
           await storageSet(inboxKey(uid), inbox.map(i => (i.id === Number(nid) ? { ...i, read: true } : i)));
         }
         const links = await storageGet<Record<string, string>>(NOTICE_LINKS_KEY, {});
-        if (links[id]) {
+        // About a task: open it. Otherwise the agent's link, otherwise the inbox.
+        if (links[`task:${id}`]) await storageSet(OPEN_TASK_KEY, links[`task:${id}`]);
+        else if (links[id]) {
           await chrome.tabs.create({ url: links[id] });
           return;
-        }
-        await storageSet(OPEN_SCREEN_KEY, 'notifications');
+        } else await storageSet(OPEN_SCREEN_KEY, 'notifications');
+      } else if (id.startsWith('st-reminder:')) {
+        await storageSet(OPEN_TASK_KEY, id.slice('st-reminder:'.length));
       }
       try {
         await chrome.action.openPopup();

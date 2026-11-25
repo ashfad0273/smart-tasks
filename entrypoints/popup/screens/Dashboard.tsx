@@ -232,6 +232,20 @@ export default function Dashboard() {
       } else if (e.key === 'Escape' && app.selected.length) {
         e.preventDefault();
         app.clearSelection();
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && app.selected.length) {
+        // Delete the selected tasks from the keyboard (same confirm as the toolbar's bin).
+        e.preventDefault();
+        const ids = app.selected;
+        void app
+          .confirm({
+            title: `Delete ${ids.length} task${ids.length === 1 ? '' : 's'}?`,
+            message: 'They will be removed on all your devices.',
+            confirmText: 'Delete',
+            danger: true,
+          })
+          .then(ok => {
+            if (ok) void app.deleteTasks(ids).then(app.clearSelection);
+          });
       } else if (e.metaKey || e.ctrlKey || e.altKey) {
         return;
       } else if (e.key === 'n' || e.key === 'N') {
@@ -742,7 +756,7 @@ function SelectionBar() {
       <button onClick={() => done(app.archiveTasks(ids))} className={btn} title="Archive">
         <Archive size={13} />
       </button>
-      <button onClick={() => void del()} className={cx(btn, 'hover:bg-danger/10 hover:text-danger')} title="Delete">
+      <button onClick={() => void del()} className={cx(btn, 'hover:bg-danger/10 hover:text-danger')} title="Delete (Del)">
         <Trash2 size={13} />
       </button>
       <button onClick={app.clearSelection} className={cx(btn, 'text-mut')} aria-label="Clear selection" title="Clear selection (Esc)">

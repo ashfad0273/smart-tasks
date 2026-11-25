@@ -226,6 +226,7 @@ export default function DesktopSettings() {
     ['Select all', '⌘/Ctrl + A'],
     ['Add to selection', '⌘/Ctrl + click'],
     ['Select a range', 'Shift + click'],
+    ['Delete selected tasks or categories', 'Delete'],
     ['Move tasks', 'Drag onto a category'],
     ['Close panel, clear selection', 'Esc'],
   ];

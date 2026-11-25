@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Archive, Bell, Bot, CalendarClock, CalendarDays, CheckCheck, History, ListTodo, Plus, Search, Settings, X } from 'lucide-react';
+import { Archive, Bell, Bot, CalendarClock, CalendarDays, CheckCheck, History, ListTodo, Plus, Search, Settings, Trash2, X } from 'lucide-react';
 import { api, type InboxItem } from '../../../lib/api';
 import { onStorageChange, storageGet } from '../../../lib/ext';
 import { inboxKey } from '../../../lib/keys';
 import { cx } from '../../../lib/utils';
 import { useApp, type ListView, type Screen, type Tab } from '../state/AppContext';
+import { useCategorySelection } from '../hooks/useCategorySelection';
 import Avatar from './Avatar';
 import { TASK_DRAG_TYPE } from './TaskCard';
 
@@ -53,6 +54,7 @@ function NavItem({
   count,
   badge,
   active,
+  selected,
   onClick,
   onDropTasks,
   dropColor = '#3fd1c5',
@@ -62,7 +64,9 @@ function NavItem({
   count?: number;
   badge?: number;
   active: boolean;
-  onClick: () => void;
+  /** Part of a multi-selection (categories). */
+  selected?: boolean;
+  onClick: (e: React.MouseEvent) => void;
   onDropTasks?: (ids: string[]) => void;
   dropColor?: string;
 }) {
@@ -71,11 +75,17 @@ function NavItem({
     <button
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
+      aria-pressed={selected || undefined}
+      onMouseDown={e => e.shiftKey && e.preventDefault() /* no text highlight on Shift-click */}
       title={onDropTasks ? `${label}: drop tasks here to move them` : undefined}
       {...handlers}
       className={cx(
         'press flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[12.5px] transition-colors',
-        active ? 'bg-acc/[.1] font-semibold text-acc' : 'text-txt/80 hover:bg-white/[.04] hover:text-txt',
+        selected
+          ? 'bg-acc/[.14] text-txt shadow-[inset_0_0_0_1px_rgba(63,209,197,.45)]'
+          : active
+            ? 'bg-acc/[.1] font-semibold text-acc'
+            : 'text-txt/80 hover:bg-white/[.04] hover:text-txt',
       )}
       style={over ? { background: `${dropColor}24`, boxShadow: `inset 0 0 0 1.5px ${dropColor}99`, color: dropColor } : undefined}
     >
@@ -96,6 +106,7 @@ export default function Sidebar() {
   const acc = app.account;
   const session = acc && !acc.local ? acc.token : null;
   const searchRef = useRef<HTMLInputElement>(null);
+  const cats = useCategorySelection();
   const [unread, setUnread] = useState(0);
   const [agentKeys, setAgentKeys] = useState<number | null>(null);
   const [, tick] = useState(0);
@@ -268,7 +279,8 @@ export default function Sidebar() {
             label={c.name}
             count={app.countsByCategory[c.id]}
             active={onTasks && app.filter === c.id}
-            onClick={() => go({ filter: c.id })}
+            selected={cats.isSelected(c.id)}
+            onClick={e => cats.onRowClick(e, c.id) || go({ filter: c.id })}
             onDropTasks={move(c.id)}
             dropColor={c.color}
           />
@@ -282,6 +294,24 @@ export default function Sidebar() {
           onDropTasks={move(null)}
           dropColor="#94a3b8"
         />
+        {cats.selected.length > 0 && (
+          <div
+            role="toolbar"
+            aria-label={`${cats.selected.length} categories selected`}
+            className="anim-card mx-1 mt-1 flex items-center gap-0.5 rounded-lg border border-white/[.07] bg-[#151a20] p-1 pl-2"
+          >
+            <span className="mr-auto text-[11px] font-semibold tabular-nums text-acc">{cats.selected.length} selected</span>
+            <button onClick={() => void cats.archive()} title="Archive with their tasks" aria-label="Archive" className="press rounded-md p-1 text-mut hover:bg-white/[.06] hover:text-txt">
+              <Archive size={13} />
+            </button>
+            <button onClick={() => void cats.remove()} title="Delete (Del)" aria-label="Delete" className="press rounded-md p-1 text-mut hover:bg-danger/10 hover:text-danger">
+              <Trash2 size={13} />
+            </button>
+            <button onClick={cats.clear} title="Clear selection (Esc)" aria-label="Clear selection" className="press rounded-md p-1 text-mut hover:bg-white/[.06] hover:text-txt">
+              <X size={13} />
+            </button>
+          </div>
+        )}
         {app.categories.length === 0 && (
           <p className="px-2.5 py-1 text-[11px] leading-snug text-mut/70">Add a category with + to group tasks.</p>
         )}

@@ -12,6 +12,8 @@
  */
 declare const __APP_VERSION__: string;
 
+import { OPEN_TASK_KEY } from '../lib/keys';
+
 export const PUSH_ON_KEY = 'st-push-on';
 const BASE = new URL('./', location.href).href; // …/app/
 /** Must be listed under the Google OAuth client's Authorized redirect URIs. */
@@ -153,6 +155,8 @@ async function notify(id: string, o: NotificationOptions) {
 // The service worker tells the page which notification was tapped.
 navigator.serviceWorker?.addEventListener('message', e => {
   const m = e.data as { type?: string; id?: string; action?: string } | null;
+  // A pushed notification about a task was tapped while the app is open.
+  if (m?.type === 'st-open-task' && m.id) return void local.set({ [OPEN_TASK_KEY]: m.id });
   if (m?.type !== 'st-notification-click' || !m.id) return;
   if (m.action?.startsWith('b')) onButtonClicked.emit(m.id, Number(m.action.slice(1)));
   else onClicked.emit(m.id);

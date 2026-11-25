@@ -140,6 +140,8 @@ export interface AgentNotice {
   from?: string | null;
   /** Text for the notification's "Copy prompt" button (unclaimed AI requests). */
   copy?: string;
+  /** The task it is about: clicking the notification opens it. */
+  taskId?: string;
 }
 
 export interface InboxItem extends AgentNotice {

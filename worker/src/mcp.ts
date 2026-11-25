@@ -419,6 +419,7 @@ const TOOLS = [
         title: { type: 'string', description: 'Short headline, up to 60 characters.' },
         message: { type: 'string', description: 'The notification body, up to 240 characters.' },
         url: { type: 'string', description: 'Optional http(s) link opened when the notification is clicked.' },
+        task_id: { type: 'string', description: 'Optional id of the task this is about (from list_tasks): clicking the notification opens that task.' },
       },
       required: ['title', 'message'],
     },
@@ -826,7 +827,8 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
           throw new ToolError('url must be an http(s) link');
         }
       }
-      const r = await ctx.hub.notify({ title, message, url }, ctx.agent);
+      const taskId = str(a.task_id, 'task_id')?.slice(0, 64) || null;
+      const r = await ctx.hub.notify({ title, message, url, taskId }, ctx.agent);
       if ('error' in r) throw new ToolError(r.error);
       return { sent: true, note: 'Devices with Smart Tasks show it within about a minute (instantly if the popup is open).' };
     }
