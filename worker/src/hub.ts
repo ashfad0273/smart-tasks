@@ -715,12 +715,14 @@ export class UserHub extends DurableObject<Env> {
     // Tag the socket with its session so the device list can show who's online
     // and a signed-out device can be disconnected immediately.
     const sid = request.headers.get('X-Session-Id');
+    // The desktop app's second, clipboard-sync connection gets clipboard messages.
+    // It doesn't report presence, so it isn't counted as an open app below.
+    const clip = request.headers.get('X-Clip') === '1';
     const tags = sid ? [sid] : [];
     // Desktop apps are tagged so phones know whether one is open (and idle).
-    if (request.headers.get('X-Client-Kind') === 'desktop') tags.push('k:desktop');
+    if (request.headers.get('X-Client-Kind') === 'desktop' && !clip) tags.push('k:desktop');
     this.ctx.acceptWebSocket(server, tags);
-    // The desktop app's clipboard-sync connection also gets clipboard messages.
-    if (request.headers.get('X-Clip') === '1') server.serializeAttachment({ clip: true });
+    if (clip) server.serializeAttachment({ clip: true });
     server.send(JSON.stringify({ type: 'rev', rev: this.rev() }));
     return new Response(null, { status: 101, webSocket: client });
   }
