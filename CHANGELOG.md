@@ -12,6 +12,9 @@ All notable changes to Smart Tasks. The newest release is at the top.
 ### Changed
 - **Easier subtasks.** Click a long subtask to read all of it (click again to fold it). Hover to see a pencil for editing, or double-click; the editor grows to show the whole text. The progress ring next to "N of M done" is gone.
 
+### Fixed
+- **Updating the desktop app shows what's happening.** "Check now" says Checking…, then "You're up to date" (or why it couldn't check), and the Update button shows the download progress and Installing… until the app restarts. Before, nothing seemed to happen. You'll see this from the next update on.
+
 ## 1.8.5 - 2026-11-25
 
 ### Added

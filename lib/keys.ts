@@ -16,6 +16,12 @@ export const OPEN_SCREEN_KEY = 'st-open-screen';
 export const OPEN_TASK_KEY = 'st-open-task';
 /** Newer release found by the updater: UpdateInfo or null. */
 export const UPDATE_KEY = 'st-update';
+/** Desktop app: what the updater is doing right now, so the update buttons can show it. */
+export const UPDATE_STATUS_KEY = 'st-update-status';
+export type UpdateStatus =
+  | { state: 'checking' | 'latest' | 'installing'; at: number }
+  | { state: 'downloading'; pct: number; at: number }
+  | { state: 'failed'; message: string; at: number };
 /** Set just before the updater reloads the extension: {from, to}. */
 export const UPDATED_KEY = 'st-updated';
 /** Version we last sent an "update ready" notification for. */

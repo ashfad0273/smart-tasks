@@ -12,7 +12,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import trayIconUrl from '../../public/icon/32.png';
 import { storageGet, storageSet, onStorageChange } from '../../lib/ext';
-import { AGENT_NOTIFY_KEY, REGISTRY_KEY, REMINDERS_ENABLED_KEY, UPDATE_KEY, UPDATED_KEY } from '../../lib/keys';
+import { AGENT_NOTIFY_KEY, REGISTRY_KEY, REMINDERS_ENABLED_KEY, UPDATE_KEY, UPDATE_STATUS_KEY, UPDATED_KEY, type UpdateStatus } from '../../lib/keys';
 import { loadRegistry, sync, activeAccount } from '../../lib/store';
 import { currentVersion, newer, type UpdateInfo } from '../../lib/updater';
 import { badge, inTauri } from './shim';
@@ -116,37 +116,56 @@ const FOCUS_CHECK_GAP_MS = 10 * 60_000;
 let lastCheck = 0;
 let installing = false;
 
+type StatusIn = UpdateStatus extends infer S ? (S extends UpdateStatus ? Omit<S, 'at'> : never) : never;
+const setStatus = (s: StatusIn | null) =>
+  storageSet(UPDATE_STATUS_KEY, s ? { ...s, at: Date.now() } : null);
+
 async function installUpdate(version: string) {
   if (installing) return;
   installing = true;
+  await setStatus({ state: 'downloading', pct: 0 });
+  // Rust sends whole percents while downloading, then 100 when the installer starts.
+  const stop = await listen<number>('update-progress', e =>
+    void setStatus(e.payload >= 100 ? { state: 'installing' } : { state: 'downloading', pct: e.payload }),
+  );
   try {
     // background.ts announces "Updated to X" on the next start.
     await storageSet(UPDATED_KEY, { from: currentVersion(), to: version });
     await invoke('install_update'); // downloads, verifies the signature, runs the installer, restarts
   } catch (e) {
     installing = false;
+    stop();
     await storageSet(UPDATED_KEY, null);
+    const message = String(e).replace(/^Error:\s*/, '').slice(0, 200);
+    await setStatus({ state: 'failed', message });
     chrome.notifications.create(`st-update-failed:${Date.now()}`, {
       type: 'basic',
       iconUrl: '',
       title: 'Update failed',
-      message: String(e).slice(0, 200),
+      message,
     });
   }
 }
 
-async function checkUpdate(): Promise<void> {
+/** `manual`: you pressed "Check now", so say what happened (checking, up to date, couldn't reach). */
+async function checkUpdate(manual = false): Promise<void> {
+  if (installing) return;
   lastCheck = Date.now();
+  if (manual) await setStatus({ state: 'checking' });
   let u: DesktopUpdate | null;
   try {
     u = await invoke<DesktopUpdate | null>('check_update');
   } catch {
-    return; // offline or the site is down: try again later
+    // offline or the site is down: try again later
+    if (manual) await setStatus({ state: 'failed', message: "Couldn't reach the update server. Check your connection." });
+    return;
   }
   if (!u || !newer(u.version, currentVersion())) {
     await storageSet(UPDATE_KEY, null);
+    if (manual) await setStatus({ state: 'latest' });
     return;
   }
+  if (manual) await setStatus(null);
   // Same shape the extension's update banner reads (Dashboard + Settings).
   const info: UpdateInfo = {
     version: u.version,
@@ -211,8 +230,10 @@ export function startHost() {
   window.addEventListener('st-desktop-update', async e => {
     const info = await storageGet<UpdateInfo | null>(UPDATE_KEY, null);
     if ((e as CustomEvent<boolean>).detail && info) void installUpdate(info.version);
-    else void checkUpdate();
+    else void checkUpdate(true);
   });
+  // A status left over from before a restart (or a failed install) shouldn't stick around.
+  void setStatus(null);
   setTimeout(() => void checkUpdate(), 20_000);
   setInterval(() => void checkUpdate(), UPDATE_EVERY_MS);
   // Opening the window (tray click, shortcut, Cmd+Tab) looks for a new version right away.

@@ -305,7 +305,25 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
     let Some(update) = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())? else {
         return Err("Already up to date.".into());
     };
-    update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+    // Progress for the UI ("Downloading 42%"): one event per whole percent, not per chunk.
+    let (progress, done) = (app.clone(), app.clone());
+    let (mut got, mut last) = (0u64, u64::MAX);
+    update
+        .download_and_install(
+            move |chunk, total| {
+                got += chunk as u64;
+                let pct = total.filter(|t| *t > 0).map(|t| (got * 100 / t).min(100)).unwrap_or(0);
+                if pct != last {
+                    last = pct;
+                    let _ = progress.emit("update-progress", pct);
+                }
+            },
+            move || {
+                let _ = done.emit("update-progress", 100u64);
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
     app.restart();
 }
 

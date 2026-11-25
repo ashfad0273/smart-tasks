@@ -8,6 +8,7 @@ import { desktopShortcut, isDesktopApp, isWebApp } from '../../../lib/desktop';
 import { formatDue } from '../../../lib/utils';
 import type { Reminder } from '../../../lib/reminders';
 import { useApp } from '../state/AppContext';
+import { updateStatusLabel, useUpdateStatus } from '../hooks/useUpdateStatus';
 import Avatar from '../components/Avatar';
 import SyncBadge from '../components/SyncBadge';
 import PhoneNotifications from '../components/PhoneNotifications';
@@ -69,6 +70,8 @@ export default function SettingsScreen() {
   const acc = app.account;
   const [remindersOn, setRemindersOn] = useState<boolean | null>(null);
   const [updateTo, setUpdateTo] = useState<string | null>(null);
+  const upd = useUpdateStatus();
+  const updBusy = upd?.state === 'checking' || upd?.state === 'downloading' || upd?.state === 'installing';
   useEffect(() => {
     const read = async () => {
       const info = await storageGet<UpdateInfo | null>(UPDATE_KEY, null);
@@ -278,12 +281,14 @@ export default function SettingsScreen() {
           </a>
           <span aria-hidden="true">·</span>
           <button
+            disabled={updBusy}
+            title={upd?.state === 'failed' ? upd.message : undefined}
             onClick={() =>
               isWebApp() ? location.reload() : void chrome.tabs.create({ url: chrome.runtime.getURL(updateTo ? 'update.html?go=1' : 'update.html') })
             }
             className={updateTo ? 'font-semibold text-acc hover:underline' : 'hover:text-txt hover:underline'}
           >
-            {updateTo ? `Update to ${updateTo}` : 'Check for updates'}
+            {upd && upd.state !== 'failed' ? updateStatusLabel(upd) : upd ? "Couldn't check" : updateTo ? `Update to ${updateTo}` : 'Check for updates'}
           </button>
           <span aria-hidden="true">·</span>
           <a href={`${API_URL}/privacy`} target="_blank" rel="noreferrer" className="hover:text-txt hover:underline">

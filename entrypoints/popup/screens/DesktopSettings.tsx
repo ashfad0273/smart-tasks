@@ -9,6 +9,7 @@ import { cx, formatDue } from '../../../lib/utils';
 import type { Reminder } from '../../../lib/reminders';
 import { useApp } from '../state/AppContext';
 import Avatar from '../components/Avatar';
+import { updateStatusLabel, useUpdateStatus } from '../hooks/useUpdateStatus';
 import { Toggle } from './SettingsScreen';
 import { streakOf } from './Dashboard';
 
@@ -85,6 +86,8 @@ export default function DesktopSettings() {
   const [agentSound, setAgentSound] = useState<boolean | null>(null);
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [updateTo, setUpdateTo] = useState<string | null>(null);
+  const upd = useUpdateStatus();
+  const updBusy = upd?.state === 'checking' || upd?.state === 'downloading' || upd?.state === 'installing';
   const [clipOn, setClipOn] = useState<boolean | null>(null);
   const [clip, setClip] = useState<ClipStatus | null>(null);
 
@@ -540,16 +543,31 @@ export default function DesktopSettings() {
 
             <Box id="about" title="About">
               <div>
-                <Line label={`Smart Tasks ${manifestVersion()}`} sub={updateTo ? `Version ${updateTo} is ready to install` : 'Updates install by themselves'}>
+                <Line
+                  label={`Smart Tasks ${manifestVersion()}`}
+                  sub={
+                    upd?.state === 'checking'
+                      ? 'Looking for a new version'
+                      : updBusy
+                        ? 'The app restarts by itself when it is done'
+                        : upd
+                          ? updateStatusLabel(upd)
+                      : updateTo
+                        ? `Version ${updateTo} is ready to install`
+                        : 'Updates install by themselves'
+                  }
+                >
                   <button
+                    disabled={updBusy}
                     onClick={() =>
                       void chrome.tabs.create({
                         url: chrome.runtime.getURL(updateTo ? 'update.html?go=1' : 'update.html'),
                       })
                     }
-                    className={linkBtn}
+                    className={cx(linkBtn, 'inline-flex items-center gap-1 disabled:cursor-default disabled:no-underline disabled:opacity-70')}
                   >
-                    {updateTo ? `Update to ${updateTo}` : 'Check now'}
+                    {updBusy && <RefreshCw size={11} className="animate-spin" />}
+                    {updBusy ? updateStatusLabel(upd!) : updateTo ? `Update to ${updateTo}` : 'Check now'}
                   </button>
                 </Line>
                 <Line label="What's new">

@@ -35,6 +35,7 @@ import TaskCard, { TASK_DRAG_TYPE } from '../components/TaskCard';
 import ScrollRow from '../components/ScrollRow';
 import QuickAdd from '../components/QuickAdd';
 import { useWide } from '../hooks/useWide';
+import { updateStatusLabel, useUpdateStatus } from '../hooks/useUpdateStatus';
 import { useMarquee } from '../hooks/useMarquee';
 import type { Task } from '../../../lib/types';
 
@@ -294,6 +295,9 @@ export default function Dashboard() {
     return onStorageChange(keys => keys.includes(UPDATE_KEY) && void read());
   }, []);
 
+  const upd = useUpdateStatus();
+  const updBusy = upd?.state === 'downloading' || upd?.state === 'installing';
+
   const sections = useMemo(() => sectionize(app.visibleTasks, app.sortBy), [app.visibleTasks, app.sortBy]);
   const streak = useMemo(() => streakOf(app.tasks), [app.tasks]);
   const doneToday = useMemo(() => {
@@ -457,15 +461,27 @@ export default function Dashboard() {
 
       {update && (
         <button
+          disabled={updBusy}
           onClick={() => void chrome.tabs.create({ url: chrome.runtime.getURL('update.html?go=1') })}
-          className="press anim-pop mx-6 mt-4 flex items-center gap-2.5 rounded-xl border border-acc/25 bg-acc/[.08] px-3.5 py-2.5 text-left hover:bg-acc/[.12]"
+          className="press anim-pop relative mx-6 mt-4 flex items-center gap-2.5 overflow-hidden rounded-xl border border-acc/25 bg-acc/[.08] px-3.5 py-2.5 text-left hover:bg-acc/[.12] disabled:cursor-default"
         >
-          <ArrowUpCircle size={15} className="shrink-0 text-acc" />
-          <span className="min-w-0 flex-1">
-            <span className="block text-[12px] font-semibold text-txt">Version {update.version} is ready</span>
-            {update.notes[0] && <span className="block truncate text-[11px] text-mut">{update.notes[0]}</span>}
+          {upd?.state === 'downloading' && (
+            <span aria-hidden="true" className="absolute inset-y-0 left-0 bg-acc/[.10] transition-[width] duration-300" style={{ width: `${upd.pct}%` }} />
+          )}
+          <ArrowUpCircle size={15} className={cx('relative shrink-0 text-acc', updBusy && 'animate-pulse')} />
+          <span className="relative min-w-0 flex-1">
+            <span className="block text-[12px] font-semibold text-txt">
+              {updBusy ? `Updating to ${update.version}…` : `Version ${update.version} is ready`}
+            </span>
+            {upd?.state === 'failed' ? (
+              <span className="block truncate text-[11px] text-danger">{upd.message}</span>
+            ) : (
+              update.notes[0] && <span className="block truncate text-[11px] text-mut">{updBusy ? 'The app restarts by itself when it is done.' : update.notes[0]}</span>
+            )}
           </span>
-          <span className="shrink-0 rounded-full bg-acc/15 px-2.5 py-1 text-[11px] font-semibold text-acc">Update</span>
+          <span className="relative shrink-0 rounded-full bg-acc/15 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-acc">
+            {updBusy ? updateStatusLabel(upd!) : upd?.state === 'failed' ? 'Try again' : 'Update'}
+          </span>
         </button>
       )}
       {app.sessionExpired && acc && (
