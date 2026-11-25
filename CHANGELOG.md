@@ -2,6 +2,11 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## Unreleased
+
+### Added
+- **Clipboard sync for the Mac and Windows apps.** Copy text or an image on one computer and paste it on another. Turn it on in Settings, Sync and devices, on each computer (it is off by default). Everything is end-to-end encrypted: the key is made on your computer and handed to your other computers automatically, so the server only relays data it cannot read and deletes it after 10 minutes. Clearing or replacing the clipboard on one computer never clears the others.
+
 ## 1.8.4 - 2026-11-25
 
 ### Added

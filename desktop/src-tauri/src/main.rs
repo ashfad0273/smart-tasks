@@ -7,6 +7,7 @@
 //! receives Google sign-in from the default browser) and updates.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod clip;
 mod presence;
 mod system;
 mod toast;
@@ -332,6 +333,10 @@ fn main() {
             open_url,
             notify,
             copy_text,
+            clip::clip_watch,
+            clip::clip_take_image,
+            clip::clip_write_text,
+            clip::clip_write_image,
             set_badge,
             set_presence,
             google_auth,

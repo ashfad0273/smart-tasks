@@ -16,6 +16,7 @@ import { AGENT_NOTIFY_KEY, REGISTRY_KEY, REMINDERS_ENABLED_KEY, UPDATE_KEY, UPDA
 import { loadRegistry, sync, activeAccount } from '../../lib/store';
 import { currentVersion, newer, type UpdateInfo } from '../../lib/updater';
 import { badge, inTauri } from './shim';
+import { startClipSync } from './clip';
 
 /** What the desktop app offers the shared UI (see lib/desktop.ts). */
 interface DesktopHost {
@@ -173,6 +174,7 @@ async function checkUpdate(): Promise<void> {
 /* ── start ──────────────────────────────────────────────────────────────── */
 
 export function startHost() {
+  startClipSync();
   // "Copy prompt" on a notification: the system clipboard, even while the window is hidden.
   chrome.runtime.onMessage.addListener((msg: { type?: string; text?: unknown }) => {
     if (msg?.type === 'st-offscreen-copy' && typeof msg.text === 'string' && inTauri) void invoke('copy_text', { text: msg.text }).catch(() => {});

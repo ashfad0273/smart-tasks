@@ -88,6 +88,14 @@ export class UserHub extends DurableObject<Env> {
       endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, session_id TEXT,
       mode TEXT NOT NULL DEFAULT 'away', away_min INTEGER NOT NULL DEFAULT 5, created_at INTEGER NOT NULL
     )`);
+    // Clipboard sync (desktop apps). Everything here is end-to-end encrypted by the
+    // computers: the key itself never reaches the server, only copies of it wrapped
+    // for each computer's own public key.
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS clip_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS clip_devices (id TEXT PRIMARY KEY, pub TEXT NOT NULL, wrapped TEXT, updated INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS clip_blobs (id TEXT NOT NULL, part INTEGER NOT NULL, data BLOB NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (id, part));
+    `);
     this.backfillActivity();
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
   }
@@ -476,6 +484,108 @@ export class UserHub extends DurableObject<Env> {
     return { latest, notices };
   }
 
+  /* ── clipboard sync ──────────────────────────────────────────────── */
+
+  private clipKeyId(): string | null {
+    return this.sql.exec<{ v: string }>(`SELECT v FROM clip_meta WHERE k = 'key_id'`).toArray()[0]?.v ?? null;
+  }
+
+  /** Sockets of computers with clipboard sync on (optionally leaving one session out). */
+  private clipSockets(exceptSid: string | null = null): WebSocket[] {
+    return this.ctx.getWebSockets().filter(ws => {
+      const a = ws.deserializeAttachment() as { clip?: boolean } | null;
+      return !!a?.clip && !(exceptSid && this.ctx.getTags(ws).includes(exceptSid));
+    });
+  }
+
+  private clipPing(m: object, exceptSid: string | null = null): void {
+    const msg = JSON.stringify(m);
+    for (const ws of this.clipSockets(exceptSid)) {
+      try {
+        ws.send(msg);
+      } catch {
+        /* socket closing */
+      }
+    }
+  }
+
+  clipKeys(): { keyId: string | null; devices: Array<{ id: string; pub: string; wrapped: string | null }> } {
+    const devices = this.sql
+      .exec<{ id: string; pub: string; wrapped: string | null }>(`SELECT id, pub, wrapped FROM clip_devices ORDER BY updated DESC LIMIT 50`)
+      .toArray();
+    return { keyId: this.clipKeyId(), devices };
+  }
+
+  /**
+   * A computer turning sync on: records its public key. The first one also sets
+   * which key everyone uses (`keyId`); `reset` starts over with a new key.
+   */
+  clipRegister(deviceId: string, pub: string, keyId: string | null, reset: boolean): { keyId: string | null } | { error: string } {
+    const cur = this.clipKeyId();
+    if (keyId && (reset || !cur)) {
+      this.sql.exec(`INSERT INTO clip_meta (k, v) VALUES ('key_id', ?) ON CONFLICT (k) DO UPDATE SET v = excluded.v`, keyId);
+      if (cur && cur !== keyId) this.sql.exec(`UPDATE clip_devices SET wrapped = NULL`);
+    } else if (keyId && cur !== keyId) return { error: 'key-mismatch' };
+    const old = this.sql.exec<{ pub: string }>(`SELECT pub FROM clip_devices WHERE id = ?`, deviceId).toArray()[0];
+    this.sql.exec(
+      `INSERT INTO clip_devices (id, pub, wrapped, updated) VALUES (?, ?, NULL, ?)
+       ON CONFLICT (id) DO UPDATE SET pub = excluded.pub, updated = excluded.updated, wrapped = CASE WHEN clip_devices.pub = excluded.pub THEN clip_devices.wrapped ELSE NULL END`,
+      deviceId,
+      pub,
+      Date.now(),
+    );
+    // Keep the list short: computers not seen for 90 days drop off.
+    this.sql.exec(`DELETE FROM clip_devices WHERE updated < ?`, Date.now() - 90 * 86_400_000);
+    const now = this.clipKeyId();
+    if (now !== cur) this.clipPing({ type: 'clip-key' });
+    if (!old || old.pub !== pub || now !== cur) this.clipPing({ type: 'clip-device' });
+    return { keyId: now };
+  }
+
+  /** A computer that has the key hands a copy to another one, wrapped for that computer only. */
+  clipWrap(deviceId: string, wrapped: string, keyId: string): { ok: true } | { error: string } {
+    if (keyId !== this.clipKeyId()) return { error: 'key-mismatch' };
+    const r = this.sql.exec(`UPDATE clip_devices SET wrapped = ? WHERE id = ?`, wrapped, deviceId);
+    if (!r.rowsWritten) return { error: 'unknown-device' };
+    this.clipPing({ type: 'clip-key' });
+    return { ok: true };
+  }
+
+  /**
+   * Something was copied: keep it for 10 minutes (so big images can be fetched) and
+   * tell the other computers right away. Small items ride along in the message.
+   */
+  clipPut(sid: string, meta: { from: string; kind: 'text' | 'image'; keyId: string }, data: ArrayBuffer): { id: string } | { error: string } {
+    // Sealed with an old key: the others couldn't open it. The sender picks up the new one.
+    if (meta.keyId !== this.clipKeyId()) return { error: 'key-mismatch' };
+    const now = Date.now();
+    const id = crypto.randomUUID();
+    const bytes = new Uint8Array(data);
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(`DELETE FROM clip_blobs WHERE created < ?`, now - 10 * 60_000);
+      const PART = 1_000_000; // SQLite rows stay under 2 MB
+      for (let i = 0, part = 0; i < bytes.length; i += PART, part++) {
+        this.sql.exec(`INSERT INTO clip_blobs (id, part, data, created) VALUES (?, ?, ?, ?)`, id, part, bytes.slice(i, i + PART), now);
+      }
+    });
+    const inline = bytes.length <= 700_000;
+    this.clipPing({ type: 'clip', id, ...meta, size: bytes.length, at: now, ...(inline ? { data: toBase64(bytes) } : {}) }, sid);
+    return { id };
+  }
+
+  clipGet(id: string): ArrayBuffer | null {
+    const parts = this.sql.exec<{ data: ArrayBuffer }>(`SELECT data FROM clip_blobs WHERE id = ? ORDER BY part`, id).toArray();
+    if (!parts.length) return null;
+    const total = parts.reduce((n, p) => n + p.data.byteLength, 0);
+    const out = new Uint8Array(total);
+    let at = 0;
+    for (const p of parts) {
+      out.set(new Uint8Array(p.data), at);
+      at += p.data.byteLength;
+    }
+    return out.buffer;
+  }
+
   /** Session ids with an open live connection right now. */
   online(): string[] {
     const ids = new Set<string>();
@@ -609,6 +719,8 @@ export class UserHub extends DurableObject<Env> {
     // Desktop apps are tagged so phones know whether one is open (and idle).
     if (request.headers.get('X-Client-Kind') === 'desktop') tags.push('k:desktop');
     this.ctx.acceptWebSocket(server, tags);
+    // The desktop app's clipboard-sync connection also gets clipboard messages.
+    if (request.headers.get('X-Clip') === '1') server.serializeAttachment({ clip: true });
     server.send(JSON.stringify({ type: 'rev', rev: this.rev() }));
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -633,4 +745,10 @@ export class UserHub extends DurableObject<Env> {
       /* already closed */
     }
   }
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
 }

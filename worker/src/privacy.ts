@@ -11,6 +11,7 @@ export const PRIVACY_HTML = `<!doctype html>
 <ul>
 <li><strong>Account details</strong> — your email address, display name and a salted, hashed password (we never see or store your actual password). If you sign in with Google, we receive your Google account ID, email, name and profile photo URL.</li>
 <li><strong>Your content</strong> — tasks, subtasks, notes, categories, due dates, and the page URL/title when you choose to save a page with the right-click menu.</li>
+<li><strong>Clipboard sync (desktop app, off unless you turn it on)</strong>: what you copy is encrypted on your computer with a key only your computers hold, then relayed to your other computers. Our server sees only encrypted data it cannot read, keeps it for at most 10 minutes so a computer can fetch it, then deletes it. Clearing your clipboard on one computer is never sent.</li>
 <li><strong>Session data</strong> — a random sign-in token (stored hashed on our server) and its creation/last-used dates.</li>
 </ul>
 <p>If you use Smart Tasks <strong>without an account</strong> ("local only"), nothing is sent to our servers — everything stays in your browser.</p>

@@ -37,6 +37,11 @@ export { UserHub } from './hub';
  *   GET|POST|DELETE /v1/push      phone push: {publicKey, settings} / subscribe {subscription, mode, awayMin} / {endpoint}
  *   POST   /v1/push/test          send a test notification to every phone
  *   GET    /v1/notices?after=<id>     → {latest, notices: [{id, title, message, url, createdAt}]}  (agent notifications)
+ *   GET    /v1/clip/keys              → {keyId, devices: [{id, pub, wrapped}]}  (clipboard sync, desktop apps)
+ *   POST   /v1/clip/device            {deviceId, pub, keyId?, reset?} → {keyId}
+ *   POST   /v1/clip/wrap              {deviceId, wrapped, keyId}
+ *   POST   /v1/clip?from=&kind=&key=  encrypted bytes → {id}; other computers get {"type":"clip",…} on the WebSocket
+ *   GET    /v1/clip/:id               encrypted bytes (kept 10 minutes)
  *   POST   /mcp                       MCP endpoint for AI agents (Bearer stk_… token)
  */
 
@@ -416,6 +421,7 @@ async function route(req: Request, env: Env): Promise<Response> {
     headers.set('X-Session-Id', user.session_id);
     // Browsers can't send X-Client on a WebSocket: use the label this session already has.
     if ((user as { device?: string | null }).device?.startsWith('Smart Tasks app')) headers.set('X-Client-Kind', 'desktop');
+    headers.set('X-Clip', url.searchParams.get('clip') === '1' ? '1' : '0');
     return hub(env, user.id).fetch(new Request('https://hub/ws', { headers }));
   }
 
@@ -588,6 +594,7 @@ async function route(req: Request, env: Env): Promise<Response> {
       return json({ ok: true });
     }
   }
+  if (p.startsWith('/v1/clip')) return clip(req, env, user, p, url);
   if (p === '/v1/sync') {
     if (m === 'GET') {
       const since = Math.max(0, Number(url.searchParams.get('since') ?? 0) || 0);
@@ -597,6 +604,53 @@ async function route(req: Request, env: Env): Promise<Response> {
       const ops = parseOps(await readJson(req));
       return json(await hub(env, user.id).push(ops));
     }
+  }
+  throw new HttpError(404, 'not-found', 'Not found');
+}
+
+const CLIP_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const CLIP_MAX = 28 * 1024 * 1024; // a 20 MB image after encryption, with room to spare
+
+/** Clipboard sync between the user's computers. The server only ever sees encrypted bytes. */
+async function clip(req: Request, env: Env, user: { id: string; session_id: string }, p: string, url: URL): Promise<Response> {
+  const h = hub(env, user.id);
+  const m = req.method;
+  if (p === '/v1/clip/keys' && m === 'GET') return json(await h.clipKeys());
+  if (p === '/v1/clip/device' && m === 'POST') {
+    const b = await readJson<{ deviceId?: unknown; pub?: unknown; keyId?: unknown; reset?: unknown }>(req);
+    if (typeof b.deviceId !== 'string' || !CLIP_ID.test(b.deviceId)) throw new HttpError(400, 'bad-device', 'Bad device id');
+    if (typeof b.pub !== 'string' || b.pub.length > 1000) throw new HttpError(400, 'bad-key', 'Bad public key');
+    if (b.keyId != null && (typeof b.keyId !== 'string' || !CLIP_ID.test(b.keyId))) throw new HttpError(400, 'bad-key', 'Bad key id');
+    const r = await h.clipRegister(b.deviceId, b.pub, (b.keyId as string | null) ?? null, b.reset === true);
+    if ('error' in r) throw new HttpError(409, r.error, 'Another key is in use');
+    return json(r);
+  }
+  if (p === '/v1/clip/wrap' && m === 'POST') {
+    const b = await readJson<{ deviceId?: unknown; wrapped?: unknown; keyId?: unknown }>(req);
+    if (typeof b.deviceId !== 'string' || !CLIP_ID.test(b.deviceId) || typeof b.keyId !== 'string' || typeof b.wrapped !== 'string' || b.wrapped.length > 2000) {
+      throw new HttpError(400, 'bad-request', 'Bad wrap');
+    }
+    const r = await h.clipWrap(b.deviceId, b.wrapped, b.keyId);
+    if ('error' in r) throw new HttpError(409, r.error, 'Could not hand over the key');
+    return json(r);
+  }
+  if (p === '/v1/clip' && m === 'POST') {
+    const from = url.searchParams.get('from') ?? '';
+    const kind = url.searchParams.get('kind');
+    const keyId = url.searchParams.get('key') ?? '';
+    if (!CLIP_ID.test(from) || !CLIP_ID.test(keyId) || (kind !== 'text' && kind !== 'image')) throw new HttpError(400, 'bad-request', 'Bad clip');
+    if (Number(req.headers.get('Content-Length') ?? 0) > CLIP_MAX) throw new HttpError(413, 'too-large', 'Too large to sync');
+    const data = await req.arrayBuffer();
+    if (data.byteLength === 0 || data.byteLength > CLIP_MAX) throw new HttpError(413, 'too-large', 'Too large to sync');
+    const r = await h.clipPut(user.session_id, { from, kind, keyId }, data);
+    if ('error' in r) throw new HttpError(409, r.error, 'Another key is in use');
+    return json(r);
+  }
+  const id = p.slice('/v1/clip/'.length);
+  if (m === 'GET' && CLIP_ID.test(id)) {
+    const data = await h.clipGet(id);
+    if (!data) throw new HttpError(404, 'gone', 'That copy has expired');
+    return new Response(data, { headers: { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store', ...CORS } });
   }
   throw new HttpError(404, 'not-found', 'Not found');
 }

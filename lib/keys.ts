@@ -29,3 +29,22 @@ export const inboxKey = (uid: string) => `st-inbox:${uid}`;
 export const TOUR_KEY = 'st-tour';
 /** Dashboard sort order (SortBy in the popup), remembered across opens. */
 export const SORT_KEY = 'st-sort';
+
+/* ── clipboard sync (desktop app) ─────────────────────────────────────── */
+/** On/off for this computer (default off). */
+export const CLIP_SYNC_KEY = 'st-clip-sync';
+/** What the sync is doing, for Settings: see ClipStatus in desktop/web/clip.ts. */
+export const CLIP_STATUS_KEY = 'st-clip-status';
+/** Settings writes a timestamp here to start over with a new key. */
+export const CLIP_RESET_KEY = 'st-clip-reset';
+/** This computer's id and key pair (the private half never leaves it). */
+export const CLIP_DEVICE_KEY = 'st-clip-device';
+/** The shared clipboard key for one account. */
+export const clipKeyKey = (uid: string) => `st-clip-key:${uid}`;
+
+export interface ClipStatus {
+  state: 'off' | 'connecting' | 'waiting' | 'on' | 'error' | 'signed-out';
+  /** Last thing synced: sent from here or received. */
+  last?: { kind: 'text' | 'image'; dir: 'out' | 'in'; at: number } | null;
+  error?: string | null;
+}

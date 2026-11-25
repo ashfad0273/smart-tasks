@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, Download, LogOut, Monitor, Puzzle, Globe, Pencil, Plus, RefreshCw, Trash2, Users } from 'lucide-react';
 import { api, API_URL, ApiError, SITE_URL, type AgentKey, type AgentStats, type DeviceSession } from '../../../lib/api';
 import { manifestVersion, onStorageChange, storageGet, storageSet } from '../../../lib/ext';
-import { AGENT_NOTIFY_KEY, AGENT_SOUND_KEY, REMINDERS_ENABLED_KEY, REMINDERS_KEY, UPDATE_KEY } from '../../../lib/keys';
+import { AGENT_NOTIFY_KEY, AGENT_SOUND_KEY, CLIP_RESET_KEY, CLIP_STATUS_KEY, CLIP_SYNC_KEY, REMINDERS_ENABLED_KEY, REMINDERS_KEY, UPDATE_KEY, type ClipStatus } from '../../../lib/keys';
 import { newer, type UpdateInfo } from '../../../lib/updater';
 import { desktopHost, desktopShortcut, isDesktopApp } from '../../../lib/desktop';
 import { cx, formatDue } from '../../../lib/utils';
@@ -85,6 +85,8 @@ export default function DesktopSettings() {
   const [agentSound, setAgentSound] = useState<boolean | null>(null);
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [updateTo, setUpdateTo] = useState<string | null>(null);
+  const [clipOn, setClipOn] = useState<boolean | null>(null);
+  const [clip, setClip] = useState<ClipStatus | null>(null);
 
   const fail = useCallback((e: unknown) => app.showToast(e instanceof ApiError ? e.message : 'Something went wrong. Try again.', 'error'), [app]);
 
@@ -102,6 +104,10 @@ export default function DesktopSettings() {
       setRemindersOn(await storageGet<boolean>(REMINDERS_ENABLED_KEY, true));
       setAgentNotify(await storageGet<boolean>(AGENT_NOTIFY_KEY, true));
       setAgentSound(await storageGet<boolean>(AGENT_SOUND_KEY, true));
+      if (isDesktopApp()) {
+        setClipOn(await storageGet<boolean>(CLIP_SYNC_KEY, false));
+        setClip(await storageGet<ClipStatus | null>(CLIP_STATUS_KEY, null));
+      }
       const list = await storageGet<Reminder[]>(REMINDERS_KEY, []);
       setNextReminder(list.find(r => r.dueAt > Date.now()) ?? null);
       const info = await storageGet<UpdateInfo | null>(UPDATE_KEY, null);
@@ -145,6 +151,33 @@ export default function DesktopSettings() {
   const setPref = (key: string, set: (v: boolean) => void) => (v: boolean) => {
     set(v);
     void storageSet(key, v);
+  };
+
+  const clipLine = (): string => {
+    if (!clipOn) return 'Copy on one computer, paste on another. Text and images.';
+    switch (clip?.state) {
+      case 'connecting':
+        return 'Connecting...';
+      case 'waiting':
+        return 'Waiting for another of your computers with it on to come online';
+      case 'error':
+        return clip.error ? `Not working: ${clip.error}` : 'Not working. Trying again.';
+      case 'on':
+        return clip.last
+          ? `Last ${clip.last.kind} ${clip.last.dir === 'in' ? 'received' : 'sent'} ${ago(clip.last.at)}. End-to-end encrypted.`
+          : 'On. Anything you copy reaches your other computers. End-to-end encrypted.';
+      default:
+        return 'Starting...';
+    }
+  };
+
+  const clipStartOver = async () => {
+    const ok = await app.confirm({
+      title: 'Start clipboard sync over?',
+      message: 'This computer makes a new key. Your other computers pick it up by themselves the next time they are online with clipboard sync on.',
+      confirmText: 'Start over',
+    });
+    if (ok) await storageSet(CLIP_RESET_KEY, Date.now());
   };
 
   const signOut = async () => {
@@ -302,6 +335,16 @@ export default function DesktopSettings() {
                 }
               >
                 <div>
+                  {clipOn !== null && (
+                    <Line label="Clipboard sync" sub={clipLine()}>
+                      {clipOn && (clip?.state === 'waiting' || clip?.state === 'error') && (
+                        <button onClick={() => void clipStartOver()} className={linkBtn}>
+                          Start over
+                        </button>
+                      )}
+                      <Toggle label="Clipboard sync" on={clipOn} onChange={setPref(CLIP_SYNC_KEY, setClipOn)} />
+                    </Line>
+                  )}
                   {devices === null ? (
                     <div className="skeleton my-3 h-20 rounded-xl" />
                   ) : (
