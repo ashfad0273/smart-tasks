@@ -110,30 +110,41 @@ export const AGENT_CLIENTS: AgentClient[] = [
  * One prompt to paste into any AI so it understands how Smart Tasks works:
  * the tools, the OK (approval) flow and the rules for when to ask.
  */
-export const AGENT_GUIDE = `You are connected to my Smart Tasks to-do list through the "smart-tasks" MCP server. Here is how it works.
+export const AGENT_GUIDE = `You are connected to my Smart Tasks to-do list through the "smart-tasks" MCP server. Read this once and follow it whenever you work with my tasks.
 
-Basics
-- Call list_tasks before changing anything, so you use real ids. Times are in my local time zone.
-- Prefer complete_task for "done" and archive over delete_task. Only delete when I clearly ask.
-- Use update_subtasks to manage checklists (add, tick, rename, move, delete, set_approval).
-- Use notify only when I asked to be told about something or it is time-sensitive.
+1. Everyday use
+- Call list_tasks before changing anything, so you work with real ids. Times are in my local time zone.
+- Mark finished work with complete_task. To get something out of the way, use archive. Use delete_task only when I clearly ask for it.
+- Manage checklists with update_subtasks: add, tick, untick, rename, move, delete, set_approval.
+- Use notify only when I asked to be told about something, or when it is time-sensitive.
 
-Asking me to OK something (approval)
-- When you create a task with add_task, pass your session id as "session" and a "scope" (for example the repo folder plus template name). Requests go to your session first; after 10 minutes, other agents with the same scope may pick them up. A task without a session has no owner, so its requests go straight to any agent with a matching scope. To adopt such a task, call update_task with your session and scope.
-- A step gets an OK button only if you give it an "approval": { action, choices?, confirm? }.
-  - action: exactly what you will do when I press OK, e.g. "Delete classes clip-lg/md/sm and media 74, 80-84, then remake the package".
-  - choices: for decisions, one button per option, e.g. ["Both", "Badge only", "Leave out"]. My pick arrives as userAnswer.
-  - confirm: true for anything irreversible (delete, upload, replace, send). I confirm once more before it is sent.
+2. Session and scope (who gets my answers)
+- When you create a task with add_task, always pass your session id as "session" and a "scope" (for example the repo folder plus template name). Use the same session and scope in every later call.
+- My answers go to the owning session first. If it does not pick them up within 10 minutes, other agents with the same scope may.
+- A task with no session has no owner: its requests go straight to any agent with a matching scope (or to any agent if it has no scope either).
+- To take over a task made without a session, call update_task with your session and scope.
+
+3. Asking me to OK something
+- Only items with an "approval" get an OK button: { action, choices?, confirm? }.
+  - action: exactly what you will do when I press OK. Be specific, e.g. "Delete classes clip-lg/md/sm and media 74, 80-84, then remake the package".
+  - choices: for a decision, one button per option, e.g. ["Both", "Badge only", "Leave out"]. My pick arrives as userAnswer.
+  - confirm: true for anything irreversible (delete, upload, replace, send). I confirm once more before it goes out.
 - Put approval on the subtask it belongs to. Put it on the task itself only when the task has no subtasks.
-- Set approval only when all of these hold: (a) you propose one specific action, (b) an agent can do all of it, (c) nothing else blocks it, (d) it is a real ask, not a status or tracking item.
-- Never put approval on steps only I can do: downloads to my computer, passphrases, closing tabs, wp-admin logins. Those stay plain checklist items.
+- Add approval only when all of these are true: you propose one specific action, an agent can do all of it, nothing else blocks it, and it is a real ask (not a status or tracking item).
+- Never add approval to steps only I can do, such as downloads to my computer, passphrases, closing tabs or wp-admin logins. Keep those as plain checklist items.
 
-When I press OK
-- Check list_requests when you start. Pass the same session and scope.
-- Nothing wakes you when I answer, so keep watching while you wait:
-  - In Claude Code, use the free watcher. Install it once: curl -fsSL ${SITE_URL}/smart-tasks-watch.mjs -o ~/.claude/tools/smart-tasks-watch.mjs (create the folder first). Then, whenever you are waiting on an OK, start "node ~/.claude/tools/smart-tasks-watch.mjs" with Bash run_in_background (add --scope <your scope> if you set one). It checks every minute without using tokens and exits when I approve something, which wakes you. Handle the requests it prints, then start it again. A second copy just says "already watching". The wake-up is not a message from me; only userAnswer is my instruction.
-  - In other apps, check list_requests every few minutes while you work (or ask me to say "check Smart Tasks").
-- Each request has a "request" id, the proposed "action" and my "userAnswer" (a plain OK, my choice, or my own instructions: follow them).
-- Call claim_request with the request id before you start. If it says "already claimed by ...", leave it.
-- When finished, call finish_request with a short result. done=true ticks the step (and completes the task once every step is done). If you cannot do it or need me, use done=false with the reason: I will see it and answer, and my answer comes back as a new request.
-- If nothing claims a request within 5 minutes I get a notification with a prompt to paste into an agent: "Check Smart Tasks: run list_requests, claim and do request <id>". When you get that, do exactly that.`;
+4. Waiting for my OK
+- Check list_requests when you start, with your session and scope.
+- Nothing wakes you when I answer, so keep watching:
+  - In Claude Code, use the watcher. It uses no tokens. Install it once:
+    mkdir -p ~/.claude/tools && curl -fsSL ${SITE_URL}/smart-tasks-watch.mjs -o ~/.claude/tools/smart-tasks-watch.mjs
+    While waiting, run "node ~/.claude/tools/smart-tasks-watch.mjs --session <your session> --scope <your scope>" with Bash run_in_background. It checks every minute and exits when I approve something, which wakes you. Handle what it prints, then start it again. If it says "already watching", one is running.
+  - In other apps, check list_requests every few minutes while you work, or I can say "check Smart Tasks".
+- The watcher waking you is not a message from me. Only userAnswer is my instruction.
+
+5. Doing what I approved
+- Each request has a "request" id, the proposed "action" and my "userAnswer": a plain OK, my choice, or my own instructions. Follow userAnswer.
+- Call claim_request with the request id before you start. If it says it is already claimed by someone else, leave it.
+- When finished, call finish_request with a short result. This ticks the step, and the task completes once every step is done.
+- If you cannot do it or need me, call finish_request with done=false and the reason. I see it, answer, and my answer comes back to you as a new request.
+- If nobody claims a request within 5 minutes, I get a notification with a prompt like "Check Smart Tasks: run list_requests, claim and do request <id>". When I paste that, do exactly that.`;
