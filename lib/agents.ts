@@ -119,7 +119,7 @@ Basics
 - Use notify only when I asked to be told about something or it is time-sensitive.
 
 Asking me to OK something (approval)
-- When you create a task with add_task, pass your session id as "session" and a "scope" (for example the repo folder plus template name). Requests go to your session first; after 10 minutes, only agents with the same scope may pick them up.
+- When you create a task with add_task, pass your session id as "session" and a "scope" (for example the repo folder plus template name). Requests go to your session first; after 10 minutes, other agents with the same scope may pick them up. A task without a session has no owner, so its requests go straight to any agent with a matching scope. To adopt such a task, call update_task with your session and scope.
 - A step gets an OK button only if you give it an "approval": { action, choices?, confirm? }.
   - action: exactly what you will do when I press OK, e.g. "Delete classes clip-lg/md/sm and media 74, 80-84, then remake the package".
   - choices: for decisions, one button per option, e.g. ["Both", "Badge only", "Leave out"]. My pick arrives as userAnswer.

@@ -210,7 +210,7 @@ const TOOLS = [
     title: 'Tasks the user approved for AI',
     description:
       'Items the user approved for AI (tasks or single subtasks they pressed OK on), waiting for an agent. Each has `request` (the id to claim), `action` (what was proposed) and userAnswer: a plain OK, the choice they picked, or their own written answer (follow it). ' +
-      'Requests from tasks you (this key and session) created come first. After 10 minutes the rest are offered to other agents, but only within the same `scope`: pass yours if you set one on add_task. Requests are never offered across scopes. ' +
+      'Requests from tasks you (this key and session) created come first. Tasks another session owns are offered to other agents after 10 minutes; tasks with no owning session right away. Either way only within the same `scope` (pass yours if you set one on add_task); a task without a scope is open to every scope. ' +
       'Call this when checking in (e.g. on a /loop), then claim_request before starting.',
     inputSchema: {
       type: 'object',
@@ -287,7 +287,7 @@ const TOOLS = [
         },
         approval: { ...APPROVAL_SCHEMA, description: 'Only for a task without subtasks. ' + APPROVAL_SCHEMA.description },
         session: { type: 'string', description: 'Your session id (e.g. Claude Code session id). Only decides who gets approved requests first; it does not add an OK button.' },
-        scope: { type: 'string', description: 'Where this work lives, e.g. repo folder plus template name. After 10 minutes unclaimed requests go only to agents with the same scope.' },
+        scope: { type: 'string', description: 'Where this work lives, e.g. repo folder plus template name. Other agents only get its requests if they pass the same scope.' },
       },
       required: ['title'],
     },
@@ -305,6 +305,8 @@ const TOOLS = [
         due: { type: ['string', 'null'], description: DUE_DESC },
         priority: { type: ['string', 'null'], enum: ['low', 'medium', 'high', null] },
         category: { type: ['string', 'null'], description: 'Category name; created if new.' },
+        session: { type: ['string', 'null'], description: 'Make this session the owner: its requests come to you first. null removes the owner.' },
+        scope: { type: ['string', 'null'], description: 'Where this work lives (as on add_task). null removes it.' },
       },
       required: ['id'],
     },
@@ -497,8 +499,7 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
         if (!src) return false;
         return session && src.session ? src.session === session : src.agent === ctx.agent;
       };
-      // After 10 minutes: other agents, but never across scopes.
-      // Unscoped (older) tasks keep the old rule: anyone after 10 minutes.
+      // Others never get requests across scopes. A task without a scope is open to any scope.
       const sameScope = (t: Rec) => {
         const s = (t.source as Src | null | undefined)?.scope ?? null;
         return s == null || s === scope;
@@ -511,7 +512,11 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
           const open = req.status === 'approved' || (req.status === 'claimed' && now - req.at > CLAIM_STALE_MS);
           if (!open) return false;
           if (mine(task)) return true;
-          return !a.mine_only && now - req.at > FALLBACK_MS && sameScope(task);
+          if (a.mine_only || !sameScope(task)) return false;
+          // The 10-minute wait only gives the owning session first pick. A task with no
+          // session (made by the user, or by an agent that didn't pass one) has no owner to wait for.
+          const owned = !!(task.source as Src | null | undefined)?.session;
+          return !owned || now - req.at > FALLBACK_MS;
         })
         .sort((x, y) => Number(mine(y.task)) - Number(mine(x.task)) || x.req!.at - y.req!.at)
         .map(({ task, sub, req }) => {
@@ -638,6 +643,13 @@ async function runTool(ctx: Ctx, name: string, a: Record<string, unknown>): Prom
       if (a.due !== undefined) data.dueAt = parseDue(a.due, ctx.tz);
       if (a.priority !== undefined) data.priority = priority(a.priority);
       if (a.category !== undefined) data.categoryId = await categoryId(ctx, a.category, true);
+      if (a.session !== undefined || a.scope !== undefined) {
+        // Adopt a task (e.g. one made without a session) or change where it lives.
+        const src = (t.source as Src | null | undefined) ?? { agent: ctx.agent, session: null };
+        const session = a.session === undefined ? src.session : a.session === null ? null : sessionArg(a);
+        const scope = a.scope === undefined ? (src.scope ?? null) : a.scope === null ? null : scopeArg(a);
+        data.source = { agent: a.session ? ctx.agent : src.agent, session, ...(scope ? { scope } : {}) };
+      }
       if (Object.keys(data).length === 1) throw new ToolError('Nothing to change — pass at least one field.');
       await push(ctx, [{ kind: 'task', id: t.id, op: 'upsert', data }]);
       const after = (await list(ctx, 'task')).find(x => x.id === t.id)!;
