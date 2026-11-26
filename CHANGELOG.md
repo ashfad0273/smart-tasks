@@ -2,6 +2,13 @@
 
 All notable changes to Smart Tasks. The newest release is at the top.
 
+## 1.8.7 - 2026-11-26
+
+### Changed
+- **Approved steps reach an agent faster.** When you press OK on a step of a task that no agent session owns (for example a task you made yourself, or one an agent made without saying which session it is), any suitable agent can pick it up right away instead of after 10 minutes.
+- **A clearer "Teach your AI" prompt.** AI agents, Copy prompt now explains the rules in five short sections, including which agent gets your answers and how an agent can take over a task.
+- For agents: update_task can set a task's `session` and `scope`, so a task made without them can be taken over instead of recreated.
+
 ## 1.8.6 - 2026-11-25
 
 ### Added
